@@ -302,6 +302,147 @@ dotnet --info | Select-String "RID"     # Should show win-x64
 
 ---
 
+## CLI Version Comparison: v0.3.238 (Windows) vs v0.3.296 (Latest)
+
+Windows Server 2022 uses **v0.3.238** — the last release with a Windows x64 binary. The latest CLI is **v0.3.296** (Linux/macOS only). Below is a comprehensive breakdown of what differs between these versions and the practical impact for Windows deployments.
+
+### NuGet/.NET Functionality — No Impact
+
+The NuGet remediation code is **virtually identical** between v0.3.238 and v0.3.296. The only change is an internal interface signature (`Prepare()` method receives an additional parameter that is ignored by the NuGet fixer). All core NuGet behavior is unchanged:
+
+| NuGet Capability | v0.3.238 | v0.3.296 |
+|-----------------|----------|----------|
+| SDK-style `.csproj` support | ✅ | ✅ |
+| Legacy `packages.config` support | ✅ | ✅ |
+| `dotnet list package --format json` parsing | ✅ Identical | ✅ Identical |
+| `dotnet add package --source` fix command | ✅ Identical | ✅ Identical |
+| `.nupkg` download from Seal artifact server | ✅ Identical | ✅ Identical |
+| Package name normalization (case-insensitive) | ✅ Identical | ✅ Identical |
+| NuGet global cache path resolution | ✅ Identical | ✅ Identical |
+| Signature verification on sealed packages | ✅ | ✅ |
+
+**Bottom line: NuGet remediation on Windows v0.3.238 is functionally equivalent to v0.3.296.**
+
+### Missing Ecosystem: Ruby/Bundler
+
+v0.3.296 adds **Ruby/Bundler** as a 10th supported ecosystem. This is not available in v0.3.238.
+
+| Ecosystem | v0.3.238 | v0.3.296 |
+|-----------|----------|----------|
+| NPM (Node.js) | ✅ | ✅ |
+| PyPI (Python) | ✅ | ✅ |
+| NuGet (.NET) | ✅ | ✅ |
+| Maven (Java) | ✅ | ✅ |
+| Go Modules | ✅ | ✅ |
+| Composer (PHP) | ✅ | ✅ |
+| RPM (Linux) | ✅ | ✅ |
+| DEB (Linux) | ✅ | ✅ |
+| APK (Alpine) | ✅ | ✅ |
+| **RubyGems (Ruby)** | ❌ | ✅ |
+
+**Impact:** Only relevant if scanning Ruby projects on the Windows server. Does **not** affect NuGet workflows.
+
+### Missing Feature: Remote Diagnostic Log Upload
+
+v0.3.296 adds the ability to upload CLI diagnostic logs to Seal's S3-backed storage for remote troubleshooting.
+
+| Feature | v0.3.238 | v0.3.296 |
+|---------|----------|----------|
+| Local log file (`/tmp/seal-cli-*.log`) | ✅ | ✅ |
+| Remote log upload to S3 | ❌ | ✅ |
+| `--no-remote-log` opt-out flag | N/A | ✅ |
+
+**Impact:** Seal support cannot pull diagnostic logs remotely from Windows deployments. Logs must be collected manually from the local machine. Log files are written to `%APPDATA%\local\seal-security\` on Windows.
+
+### Missing Feature: Image Layer Squashing
+
+v0.3.296 adds a `--squash` flag to the `seal image` command for container image layer squashing.
+
+| Feature | v0.3.238 | v0.3.296 |
+|---------|----------|----------|
+| `seal image fix` command | ✅ | ✅ |
+| `--squash` layer squashing | ❌ | ✅ |
+
+**Impact:** Only relevant for container image remediation workflows. Does **not** affect NuGet package remediation.
+
+### Missing Feature: Silence Rule Ecosystem Filtering
+
+v0.3.296 adds per-ecosystem filtering of silence rules in `--mode remote`. In v0.3.238, silence rules from the backend are applied globally without ecosystem filtering.
+
+| Feature | v0.3.238 | v0.3.296 |
+|---------|----------|----------|
+| Silence rules (remote mode) | ✅ All rules applied | ✅ Filtered per ecosystem |
+| Silence rule validation | Basic | Enhanced (empty-part checks) |
+
+**Impact:** If silence rules are configured for multiple ecosystems on the same project, v0.3.238 may attempt to apply rules from other ecosystems. In practice, this is a minor edge case — silence rules that don't match installed packages are harmlessly ignored.
+
+### Missing Feature: Embedded AWS CA Bundle
+
+v0.3.296 embeds an AWS CA certificate bundle for resilient TLS connectivity to Seal's backend, even on systems with outdated root certificates.
+
+| Feature | v0.3.238 | v0.3.296 |
+|---------|----------|----------|
+| TLS with system CA store | ✅ | ✅ |
+| Embedded AWS CA fallback | ❌ | ✅ |
+
+**Impact:** Windows Server 2022 ships with current root certificates and receives updates via Windows Update. This is **not a concern** as long as the server's certificate store is up to date.
+
+### Configuration Changes (Not Backward-Compatible)
+
+v0.3.296 introduces new config sections and renames some fields. These only matter if using `.seal-config.yml`.
+
+| Config Section | v0.3.238 | v0.3.296 |
+|----------------|----------|----------|
+| `java-files` (skip directory changes) | ❌ | ✅ |
+| `rpm` (no GPM install) | ❌ | ✅ |
+| `bundler` (prod-only deps) | ❌ | ✅ |
+| `golang` (don't change go.mod) | ❌ | ✅ |
+| `maven.copy-entire-m2-cache` | ❌ | ✅ |
+| `snyk.project-ids` (multi-project) | ❌ (single `project-id`) | ✅ (array of IDs) |
+| BlackDuck config key names | `blackduck-url`, `blackduck-token` | Renamed to `url`, `token` |
+
+**Impact:** None of these affect NuGet workflows. The BlackDuck key rename is only relevant if integrating with BlackDuck.
+
+### Integration Callbacks — Identical
+
+Both versions support the same set of third-party integrations:
+
+| Integration | v0.3.238 | v0.3.296 |
+|-------------|----------|----------|
+| Snyk | ✅ | ✅ |
+| Dependabot | ✅ | ✅ |
+| Checkmarx | ✅ | ✅ |
+| JFrog Xray | ✅ | ✅ |
+| BlackDuck | ✅ | ✅ |
+| SentinelOne | ✅ | ✅ |
+| Ox Security | ✅ | ✅ |
+
+### Fix Orchestration Improvements (Minor)
+
+v0.3.296 has minor improvements to the fix workflow that are cosmetic or affect edge cases:
+
+| Improvement | Impact |
+|-------------|--------|
+| Progress bar no longer advances for skipped callbacks | Cosmetic — more accurate progress display |
+| Progress bar shows "completed" after each callback | Cosmetic — better feedback |
+| Shaded dependencies included in descriptors but skipped at fix time | Java-only — does not affect NuGet |
+
+### Summary: What Windows Server 2022 Users Are Missing
+
+| Category | What's Missing | Severity | NuGet Impact |
+|----------|---------------|----------|--------------|
+| **Ecosystem** | Ruby/Bundler support | Low | None |
+| **Diagnostics** | Remote log upload | Low | Manual log collection still works |
+| **Containers** | Image `--squash` flag | Low | None |
+| **Rules** | Silence rule ecosystem filtering | Very Low | Harmless in practice |
+| **TLS** | Embedded AWS CA bundle | Very Low | Not needed on patched Windows Server |
+| **Config** | New config sections (Java, RPM, Go, Bundler) | None | N/A for NuGet |
+| **NuGet** | — | **None** | **Fully equivalent** |
+
+> **The v0.3.238 CLI is fully capable for NuGet/.NET vulnerability remediation on Windows Server 2022.** All differences between v0.3.238 and v0.3.296 are in areas outside of NuGet — primarily Ruby ecosystem support, remote log upload, and minor UX improvements. There are no NuGet-specific bug fixes, features, or behavioral changes that Windows users are missing.
+
+---
+
 ## Seal CLI Reference (Windows — v0.3.238)
 
 > This is the latest CLI version with Windows x64 support. All releases from [GitHub](https://github.com/seal-community/cli/releases) at v0.3.239+ ship Linux/macOS only.
