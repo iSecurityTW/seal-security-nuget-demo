@@ -29,17 +29,29 @@ dotnet --list-sdks
 
 ### 2. Install Seal Security CLI (Windows x64)
 
-Download the Windows x64 CLI from [https://app.sealsecurity.io](https://app.sealsecurity.io) (Onboarding → Download CLI).
+> **Note:** The latest Windows CLI release is **v0.3.238** (Sep 11, 2025). Windows binaries were discontinued after this version.
+> Newer releases only ship Linux and macOS binaries. v0.3.238 is fully functional for NuGet remediation on Windows.
+
+Download from GitHub Releases:
+- **EXE:** [seal-windows-amd64-v0.3.238.exe](https://github.com/seal-community/cli/releases/download/v0.3.238/seal-windows-amd64-v0.3.238.exe) (24.5 MB)
+- **ZIP:** [seal-windows-amd64-v0.3.238.zip](https://github.com/seal-community/cli/releases/download/v0.3.238/seal-windows-amd64-v0.3.238.zip)
+
+Or download via PowerShell:
 
 ```powershell
-# Place seal.exe somewhere on your PATH, e.g.:
-Move-Item seal.exe C:\Tools\seal.exe
+# Download the CLI
+$cliUrl = "https://github.com/seal-community/cli/releases/download/v0.3.238/seal-windows-amd64-v0.3.238.exe"
+Invoke-WebRequest -Uri $cliUrl -OutFile C:\Tools\seal.exe
 
 # Add to PATH (run as Administrator, persists across sessions)
 [Environment]::SetEnvironmentVariable("Path", $env:Path + ";C:\Tools", "Machine")
 
+# Reload PATH in current session
+$env:Path = [Environment]::GetEnvironmentVariable("Path", "Machine")
+
 # Verify
 seal version
+# Expected output: v0.3.238
 ```
 
 ### 3. Install Git (optional, for cloning)
@@ -145,6 +157,12 @@ System.Net.Http     4.3.0-sp1
 ## Full Workflow (Copy & Paste)
 
 ```powershell
+# Download and install Seal CLI (v0.3.238 — latest Windows release)
+$cliUrl = "https://github.com/seal-community/cli/releases/download/v0.3.238/seal-windows-amd64-v0.3.238.exe"
+New-Item -ItemType Directory -Force -Path C:\Tools | Out-Null
+Invoke-WebRequest -Uri $cliUrl -OutFile C:\Tools\seal.exe
+$env:Path += ";C:\Tools"
+
 # Set credentials
 $env:SEAL_TOKEN = "your-seal-token-here"
 $env:SEAL_PROJECT = "nuget-demo"
@@ -284,8 +302,9 @@ dotnet --info | Select-String "RID"     # Should show win-x64
 
 ---
 
-## Seal CLI Reference (Windows)
+## Seal CLI Reference (Windows — v0.3.238)
 
+> This is the latest CLI version with Windows x64 support. All releases from [GitHub](https://github.com/seal-community/cli/releases) at v0.3.239+ ship Linux/macOS only.
 | Command | Description |
 |---------|-------------|
 | `seal version` | Show CLI version |

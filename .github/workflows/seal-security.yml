@@ -33,17 +33,21 @@ jobs:
           SEAL_PROJECT: nuget-demo
           SEAL_TOKEN: ${{ secrets.SEAL_TOKEN }}
 
+      - name: Download Seal CLI (Windows x64 v0.3.238)
+        shell: pwsh
+        run: |
+          $cliUrl = "https://github.com/seal-community/cli/releases/download/v0.3.238/seal-windows-amd64-v0.3.238.exe"
+          Invoke-WebRequest -Uri $cliUrl -OutFile seal.exe
+          Write-Host "Seal CLI downloaded"
+          .\seal.exe version
+
       - name: Seal Security - Fix Vulnerabilities
-        uses: seal-community/cli-action@latest
-        with:
-          mode: fix
-          fix_mode: ${{ github.event.inputs.fix_mode || 'remote' }}
-          target: seal-security-nuget-demo.csproj
-          project: nuget-demo
-          token: ${{ secrets.SEAL_TOKEN }}
+        shell: pwsh
+        run: |
+          .\seal.exe fix . --mode ${{ github.event.inputs.fix_mode || 'remote' }} -v
         env:
-          SEAL_SNYK_URL: "https://api.snyk.io"
-          SEAL_SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+          SEAL_PROJECT: nuget-demo
+          SEAL_TOKEN: ${{ secrets.SEAL_TOKEN }}
 
       - name: Restore with Sealed Packages
         run: dotnet restore
@@ -59,6 +63,9 @@ jobs:
 
       - name: Publish Application
         run: dotnet publish -c Release -r win-x64 -o ./publish
+        env:
+          SEAL_PROJECT: nuget-demo
+          SEAL_TOKEN: ${{ secrets.SEAL_TOKEN }}
 
       - name: Start Application
         shell: pwsh
