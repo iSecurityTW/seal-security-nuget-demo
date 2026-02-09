@@ -27,14 +27,6 @@ jobs:
         with:
           dotnet-version: '9.0.x'
 
-      - name: Configure Seal Security NuGet Feed
-        run: |
-          dotnet nuget add source https://nuget.sealsecurity.io/v3/index.json \
-            --name Seal \
-            --username nuget-demo \
-            --password ${{ secrets.SEAL_TOKEN }} \
-            --store-password-in-clear-text
-
       - name: Restore Dependencies
         run: dotnet restore
         env:
@@ -61,6 +53,9 @@ jobs:
 
       - name: Build Application
         run: dotnet build --no-restore
+        env:
+          SEAL_PROJECT: nuget-demo
+          SEAL_TOKEN: ${{ secrets.SEAL_TOKEN }}
 
       - name: Publish Application
         run: dotnet publish -c Release -o ./publish
