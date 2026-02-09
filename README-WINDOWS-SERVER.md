@@ -304,11 +304,13 @@ dotnet --info | Select-String "RID"     # Should show win-x64
 
 ## CLI Version Comparison: v0.3.238 (Windows) vs v0.3.296 (Latest)
 
-Windows Server 2022 uses **v0.3.238** — the last release with a Windows x64 binary. The latest CLI is **v0.3.296** (Linux/macOS only). Below is a comprehensive breakdown of what differs between these versions and the practical impact for Windows deployments.
+Windows Server 2022 uses **v0.3.238** — the last release with a Windows x64 binary. The latest CLI is **v0.3.296** (Linux/macOS only). There are **58 releases** between these versions, with **116 source files changed, 26 added, 2 removed** (excluding tests). Below is a comprehensive breakdown based on a full source-code diff.
+
+---
 
 ### NuGet/.NET Functionality — No Impact
 
-The NuGet remediation code is **virtually identical** between v0.3.238 and v0.3.296. The only change is an internal interface signature (`Prepare()` method receives an additional parameter that is ignored by the NuGet fixer). All core NuGet behavior is unchanged:
+The NuGet remediation code is **virtually identical** between v0.3.238 and v0.3.296. Of the 21 files in the MSIL/NuGet module (`internal/ecosystem/msil/`), only 2 changed — both are trivial interface signature updates (`Prepare()` method receives an unused parameter). The actual fix logic, parsing, downloading, and normalization code is **byte-for-byte identical**.
 
 | NuGet Capability | v0.3.238 | v0.3.296 |
 |-----------------|----------|----------|
@@ -316,16 +318,18 @@ The NuGet remediation code is **virtually identical** between v0.3.238 and v0.3.
 | Legacy `packages.config` support | ✅ | ✅ |
 | `dotnet list package --format json` parsing | ✅ Identical | ✅ Identical |
 | `dotnet add package --source` fix command | ✅ Identical | ✅ Identical |
-| `.nupkg` download from Seal artifact server | ✅ Identical | ✅ Identical |
+| `.nupkg` download from `nuget.sealsecurity.io` | ✅ Identical | ✅ Identical |
 | Package name normalization (case-insensitive) | ✅ Identical | ✅ Identical |
 | NuGet global cache path resolution | ✅ Identical | ✅ Identical |
 | Signature verification on sealed packages | ✅ | ✅ |
 
 **Bottom line: NuGet remediation on Windows v0.3.238 is functionally equivalent to v0.3.296.**
 
-### Missing Ecosystem: Ruby/Bundler
+---
 
-v0.3.296 adds **Ruby/Bundler** as a 10th supported ecosystem. This is not available in v0.3.238.
+### New Ecosystem: Ruby/Bundler
+
+v0.3.296 adds **Ruby/Bundler** as a 10th supported ecosystem with full fix, rename, and silence support.
 
 | Ecosystem | v0.3.238 | v0.3.296 |
 |-----------|----------|----------|
@@ -340,106 +344,249 @@ v0.3.296 adds **Ruby/Bundler** as a 10th supported ecosystem. This is not availa
 | APK (Alpine) | ✅ | ✅ |
 | **RubyGems (Ruby)** | ❌ | ✅ |
 
-**Impact:** Only relevant if scanning Ruby projects on the Windows server. Does **not** affect NuGet workflows.
+**Impact:** Only relevant if scanning Ruby/Bundler projects. Does **not** affect NuGet workflows.
 
-### Missing Feature: Remote Diagnostic Log Upload
+---
 
-v0.3.296 adds the ability to upload CLI diagnostic logs to Seal's S3-backed storage for remote troubleshooting.
+### Signature Verification — Hardened in v0.3.296
+
+v0.3.296 makes a notable security change: the ECDSA public key used to verify sealed packages is now **embedded directly in the binary** rather than fetched from the backend at runtime.
 
 | Feature | v0.3.238 | v0.3.296 |
 |---------|----------|----------|
-| Local log file (`/tmp/seal-cli-*.log`) | ✅ | ✅ |
-| Remote log upload to S3 | ❌ | ✅ |
+| Public key source | Fetched from backend API (`GET /unauthenticated/v1/signature/public_key`) | **Hardcoded in binary** (Base64 ECDSA P-256 key) |
+| Signature matching | Matched by filename only | **Matched by filename + libraryVersionId** (stricter) |
+| `GetPublicKey()` API call | ✅ Used | ❌ Removed (no longer needed) |
+
+**Impact:** v0.3.238 fetches the public key over the network each time, which means it depends on that API endpoint being available. If Seal ever rotates or deprecates this endpoint, v0.3.238 signature verification could break. However, `--skip-sign-checks` can bypass this. For the demo, this is not a concern.
+
+---
+
+### Remote Diagnostic Log Upload
+
+v0.3.296 adds the ability to upload CLI diagnostic logs to Seal's S3-backed storage for remote troubleshooting via presigned POST URLs.
+
+| Feature | v0.3.238 | v0.3.296 |
+|---------|----------|----------|
+| Local log file | ✅ Written to temp dir | ✅ Written to temp dir |
+| Remote log upload to S3 | ❌ | ✅ (automatic, presigned POST) |
 | `--no-remote-log` opt-out flag | N/A | ✅ |
+| Dual log files (local + upload) | ❌ | ✅ |
+| `GetLogUploadPresignedURL()` API | N/A | ✅ |
 
-**Impact:** Seal support cannot pull diagnostic logs remotely from Windows deployments. Logs must be collected manually from the local machine. Log files are written to `%APPDATA%\local\seal-security\` on Windows.
+**Impact:** Seal support cannot pull diagnostic logs remotely from Windows deployments. Logs must be collected manually from `%APPDATA%\local\seal-security\`.
 
-### Missing Feature: Image Layer Squashing
+---
 
-v0.3.296 adds a `--squash` flag to the `seal image` command for container image layer squashing.
+### Embedded AWS CA Certificate Bundle
 
-| Feature | v0.3.238 | v0.3.296 |
-|---------|----------|----------|
-| `seal image fix` command | ✅ | ✅ |
-| `--squash` layer squashing | ❌ | ✅ |
-
-**Impact:** Only relevant for container image remediation workflows. Does **not** affect NuGet package remediation.
-
-### Missing Feature: Silence Rule Ecosystem Filtering
-
-v0.3.296 adds per-ecosystem filtering of silence rules in `--mode remote`. In v0.3.238, silence rules from the backend are applied globally without ecosystem filtering.
+v0.3.296 embeds an AWS CA certificate bundle (`aws_ca_bundle.pem`) into the binary and creates a custom TLS client that appends these certs to the system cert pool.
 
 | Feature | v0.3.238 | v0.3.296 |
 |---------|----------|----------|
-| Silence rules (remote mode) | ✅ All rules applied | ✅ Filtered per ecosystem |
-| Silence rule validation | Basic | Enhanced (empty-part checks) |
+| TLS with system CA store | ✅ `http.Client{}` (default) | ✅ Custom `http.Client` with merged pool |
+| Embedded AWS CA fallback | ❌ | ✅ (handles outdated system certs) |
+| Custom `createHttpClient()` function | ❌ | ✅ |
 
-**Impact:** If silence rules are configured for multiple ecosystems on the same project, v0.3.238 may attempt to apply rules from other ecosystems. In practice, this is a minor edge case — silence rules that don't match installed packages are harmlessly ignored.
+**Impact:** Windows Server 2022 ships with current root certificates and receives updates via Windows Update. This is **not a concern** as long as the server's certificate store is reasonably up to date. On air-gapped or unpatched servers, v0.3.238 could potentially fail TLS handshakes to `cli.sealsecurity.io` if system certs are stale.
 
-### Missing Feature: Embedded AWS CA Bundle
+---
 
-v0.3.296 embeds an AWS CA certificate bundle for resilient TLS connectivity to Seal's backend, even on systems with outdated root certificates.
+### Checkmarx Integration — Major Overhaul
+
+The Checkmarx client was **completely rewritten** in v0.3.296 to use OAuth2/OIDC token refresh instead of direct token auth.
 
 | Feature | v0.3.238 | v0.3.296 |
 |---------|----------|----------|
-| TLS with system CA store | ✅ | ✅ |
-| Embedded AWS CA fallback | ❌ | ✅ |
+| Auth mechanism | Direct bearer token (`cfg.Token`) | **OAuth2 refresh token flow** (Keycloak OIDC) |
+| Token refresh | ❌ Manual token management | ✅ Automatic access token refresh via Keycloak |
+| Realm extraction | ❌ | ✅ Auto-extracted from JWT issuer claim |
+| IAM URL derivation | ❌ | ✅ `ast.checkmarx.net` → `iam.checkmarx.net` |
+| `jwt` dependency | ❌ | ✅ `github.com/golang-jwt/jwt/v5` |
+| Token caching | ❌ | ✅ Cached with expiry tracking |
+| Form-encoded requests | ❌ | ✅ New `sendFormRequest()` for token endpoint |
 
-**Impact:** Windows Server 2022 ships with current root certificates and receives updates via Windows Update. This is **not a concern** as long as the server's certificate store is up to date.
+**Impact:** If using Checkmarx integration on Windows with v0.3.238, the old direct-token auth is used. If Checkmarx migrates to require OIDC-only auth, v0.3.238 would break. For NuGet-only workflows without Checkmarx integration, **no impact**.
 
-### Configuration Changes (Not Backward-Compatible)
+---
 
-v0.3.296 introduces new config sections and renames some fields. These only matter if using `.seal-config.yml`.
+### BlackDuck Integration — Improved CVE Resolution
 
-| Config Section | v0.3.238 | v0.3.296 |
-|----------------|----------|----------|
-| `java-files` (skip directory changes) | ❌ | ✅ |
-| `rpm` (no GPM install) | ❌ | ✅ |
-| `bundler` (prod-only deps) | ❌ | ✅ |
-| `golang` (don't change go.mod) | ❌ | ✅ |
-| `maven.copy-entire-m2-cache` | ❌ | ✅ |
-| `snyk.project-ids` (multi-project) | ❌ (single `project-id`) | ✅ (array of IDs) |
-| BlackDuck config key names | `blackduck-url`, `blackduck-token` | Renamed to `url`, `token` |
+v0.3.296 adds proper CVE extraction from BlackDuck's proprietary vulnerability identifiers and package manager mapping.
 
-**Impact:** None of these affect NuGet workflows. The BlackDuck key rename is only relevant if integrating with BlackDuck.
+| Feature | v0.3.238 | v0.3.296 |
+|---------|----------|----------|
+| CVE extraction from BlackDuck IDs | ❌ Basic | ✅ `extractVulnIdentifier()` — parses `RelatedVulnerability` |
+| Package manager name mapping | ❌ | ✅ `blackDuckToSealPackageManager()` (maps `npmjs` → `NPM`, `pypi` → `PyPI`, etc.) |
+| Config key names | `blackduck-url`, `blackduck-token` | **Renamed to** `url`, `token` (breaking change) |
 
-### Integration Callbacks — Identical
+**Impact:** Only relevant if integrating with BlackDuck. Note: if you later upgrade to v0.3.296 config format, BlackDuck config keys need renaming.
 
-Both versions support the same set of third-party integrations:
+---
 
-| Integration | v0.3.238 | v0.3.296 |
+### Snyk Integration — Multi-Project Support
+
+v0.3.296 replaces single `project-id` with an array of `project-ids`, allowing the CLI to update multiple Snyk projects in one run.
+
+| Feature | v0.3.238 | v0.3.296 |
+|---------|----------|----------|
+| Single Snyk project | ✅ `snyk.project-id` | ✅ (backward compat via `ProjectIds`) |
+| Multiple Snyk projects | ❌ | ✅ `snyk.project-ids: [id1, id2, ...]` |
+| Per-project error handling | N/A | ✅ Continues on individual project failures |
+
+**Impact:** Only relevant if using Snyk. v0.3.238 is limited to one project per run.
+
+---
+
+### SentinelOne Integration — Minor Change
+
+v0.3.296 removes the `tag` query parameter from SentinelOne policy queries.
+
+| Feature | v0.3.238 | v0.3.296 |
+|---------|----------|----------|
+| Tag-based policy query filter | ✅ | ❌ Removed |
+
+**Impact:** Only relevant if using SentinelOne. Behavioral change to how policies are queried.
+
+---
+
+### Go Module Improvements
+
+The Go ecosystem fixer received significant changes in v0.3.296:
+
+| Feature | v0.3.238 | v0.3.296 |
+|---------|----------|----------|
+| `go.mod` update after fix | ✅ (always) | ✅ (configurable via `dont-change-go-mod`) |
+| `vendor/modules.txt` update | ❌ | ✅ `updateVersionInModulesFile()` — regex-based version replacement |
+| `go mod edit` for version changes | ❌ | ✅ `updateVersionInModFile()` — proper `require`/`dropreplace` handling |
+| Rename uses sealed version | ❌ (used vulnerable version) | ✅ Bug fix — uses `AvailableFix.Version` |
+
+**Impact:** None for NuGet. Go Modules users on v0.3.238 will have a less complete fix (go.mod and modules.txt may not be updated, rename may reference wrong version).
+
+---
+
+### Maven Improvements
+
+The Maven fixer was substantially reworked for cache management:
+
+| Feature | v0.3.238 | v0.3.296 |
+|---------|----------|----------|
+| M2 cache preparation | Recursive link tree of entire cache | **Selective linking** — only links paths for app dependencies |
+| `copy-entire-m2-cache` option | ❌ | ✅ Config flag to fall back to old behavior |
+| Plugin dependency tracking | ❌ | ✅ `pluginDependencies` tracked separately |
+| Selective linking tests | ❌ | ✅ New `selective_linking_test.go` |
+
+**Impact:** None for NuGet. Maven users on v0.3.238 use the older full-cache symlink approach (slower but functional).
+
+---
+
+### NPM Improvements
+
+The NPM fixer now generates unique rollback directory names using UUIDs to prevent collisions with scoped packages.
+
+| Feature | v0.3.238 | v0.3.296 |
+|---------|----------|----------|
+| Rollback dir naming | Relative path suffix | **UUID-based** (`{uuid}_{sanitized_name}_{version}`) |
+| Scoped package path handling | ❌ Could create nested dirs | ✅ Slashes replaced with underscores |
+
+**Impact:** None for NuGet. NPM users on v0.3.238 may hit edge cases with scoped packages (`@org/pkg`) during rollback.
+
+---
+
+### Image Fix — Squash Support
+
+v0.3.296 adds `--squash` flag for container image layer squashing during `seal image fix`.
+
+| Feature | v0.3.238 | v0.3.296 |
+|---------|----------|----------|
+| `seal image fix` | ✅ | ✅ |
+| `--squash` layer squash | ❌ | ✅ |
+| Image metadata extraction | ❌ | ✅ `metadata_extractor.go` |
+
+**Impact:** Only relevant for container image remediation.
+
+---
+
+### Silence Rule Ecosystem Filtering
+
+v0.3.296 filters silence rules to match the current package manager's ecosystem. v0.3.238 applies all silence rules globally.
+
+| Feature | v0.3.238 | v0.3.296 |
+|---------|----------|----------|
+| Per-ecosystem filtering | ❌ All rules applied globally | ✅ `filterSilenceRulesForEcosystem()` |
+| Empty-part validation | ❌ | ✅ Rejects rules with empty manager or package parts |
+
+**Impact:** Minor edge case — if silence rules are configured for multiple ecosystems on the same project, v0.3.238 may attempt to apply non-matching rules (which are harmlessly ignored).
+
+---
+
+### API Changes
+
+| API Endpoint | v0.3.238 | v0.3.296 |
 |-------------|----------|----------|
-| Snyk | ✅ | ✅ |
-| Dependabot | ✅ | ✅ |
-| Checkmarx | ✅ | ✅ |
-| JFrog Xray | ✅ | ✅ |
-| BlackDuck | ✅ | ✅ |
-| SentinelOne | ✅ | ✅ |
-| Ox Security | ✅ | ✅ |
+| `GET /unauthenticated/v1/signature/public_key` | ✅ Used | ❌ Removed (key embedded in binary) |
+| `GET /authenticated/v1/logs/upload/generate-post-url` | N/A | ✅ New (log upload) |
+| `GetClient()` accessor on `CliServer` | ❌ | ✅ New |
+| All API methods | Value receivers `(s CliServer)` | **Pointer receivers** `(s *CliServer)` |
+| `SilenceRule.SealedVersion` field | ❌ | ✅ New optional field |
 
-### Fix Orchestration Improvements (Minor)
+**Impact:** The API receiver change (value → pointer) is an internal optimization. The removed `GetPublicKey` endpoint is a potential future concern (see Signature Verification section above).
 
-v0.3.296 has minor improvements to the fix workflow that are cosmetic or affect edge cases:
+---
 
-| Improvement | Impact |
-|-------------|--------|
-| Progress bar no longer advances for skipped callbacks | Cosmetic — more accurate progress display |
-| Progress bar shows "completed" after each callback | Cosmetic — better feedback |
-| Shaded dependencies included in descriptors but skipped at fix time | Java-only — does not affect NuGet |
+### Configuration Changes
+
+v0.3.296 introduces new `.seal-config.yml` sections:
+
+| Config Section | v0.3.238 | v0.3.296 | Purpose |
+|----------------|----------|----------|---------|
+| `java-files.skip-directory-changes` | ❌ | ✅ | Skip dir changes during Java files fix |
+| `rpm.no-gpg-install` | ❌ | ✅ | Skip GPG key installation for RPM |
+| `bundler.prod-only` | ❌ | ✅ | Only scan production Ruby deps |
+| `golang.dont-change-go-mod` | ❌ | ✅ | Seal vendor without modifying go.mod |
+| `maven.copy-entire-m2-cache` | ❌ | ✅ | Revert to recursive cache linking |
+| `maven.skip-directory-changes` | ❌ | ✅ | Skip dir changes during Maven fix |
+| `gradle.skip-directory-changes` | ❌ | ✅ | Skip dir changes during Gradle fix |
+| `snyk.project-ids` (array) | ❌ | ✅ | Multi-project Snyk support |
+
+**Impact:** None of these affect NuGet workflows. They are ecosystem-specific tuning options.
+
+---
+
+### Fix Orchestration Improvements
+
+| Improvement | Details | Impact |
+|-------------|---------|--------|
+| Progress bar accuracy | Skipped callbacks no longer advance the step counter | Cosmetic |
+| Progress bar feedback | Shows "completed" after each callback | Cosmetic |
+| Callback logging | Includes step name in log messages | Better diagnostics |
+| Shaded dep tracking | Shaded deps included in descriptors but skipped at fix time | Java-only (fix for reporting accuracy) |
+
+---
 
 ### Summary: What Windows Server 2022 Users Are Missing
 
 | Category | What's Missing | Severity | NuGet Impact |
 |----------|---------------|----------|--------------|
+| **NuGet/.NET** | — | **None** | **Fully equivalent** |
 | **Ecosystem** | Ruby/Bundler support | Low | None |
-| **Diagnostics** | Remote log upload | Low | Manual log collection still works |
+| **Security** | Embedded public key (signature verification hardening) | Low | v0.3.238 fetches key from API (works today) |
+| **Diagnostics** | Remote log upload to S3 | Low | Manual log collection still works |
+| **TLS** | Embedded AWS CA bundle | Low | Not needed on patched Windows Server |
+| **Checkmarx** | OAuth2/OIDC token refresh (major rewrite) | Medium* | None unless using Checkmarx |
+| **BlackDuck** | CVE extraction, package manager mapping | Low* | None unless using BlackDuck |
+| **Snyk** | Multi-project support | Low* | None unless using Snyk |
+| **SentinelOne** | Tag filter removed from policy query | Low* | None unless using SentinelOne |
+| **Go Modules** | go.mod/modules.txt updates, rename fix | Medium* | None — different ecosystem |
+| **Maven** | Selective cache linking (performance) | Low* | None — different ecosystem |
+| **NPM** | UUID rollback dirs for scoped packages | Low* | None — different ecosystem |
 | **Containers** | Image `--squash` flag | Low | None |
 | **Rules** | Silence rule ecosystem filtering | Very Low | Harmless in practice |
-| **TLS** | Embedded AWS CA bundle | Very Low | Not needed on patched Windows Server |
-| **Config** | New config sections (Java, RPM, Go, Bundler) | None | N/A for NuGet |
-| **NuGet** | — | **None** | **Fully equivalent** |
+| **Config** | New tuning sections (7 ecosystems) | None | N/A for NuGet |
 
-> **The v0.3.238 CLI is fully capable for NuGet/.NET vulnerability remediation on Windows Server 2022.** All differences between v0.3.238 and v0.3.296 are in areas outside of NuGet — primarily Ruby ecosystem support, remote log upload, and minor UX improvements. There are no NuGet-specific bug fixes, features, or behavioral changes that Windows users are missing.
+\* *Severity marked for the relevant ecosystem — not applicable to NuGet.*
+
+> **The v0.3.238 CLI is fully capable for NuGet/.NET vulnerability remediation on Windows Server 2022.** The 58 releases between v0.3.238 and v0.3.296 contain 116 changed source files, but none of the changes affect NuGet fix logic. The most significant differences are: Ruby ecosystem support, the Checkmarx auth rewrite, Go Modules fix improvements, Maven cache optimization, embedded signature key/AWS CA bundle, and remote log upload. None of these impact the NuGet remediation workflow that will be used on this Windows server.
 
 ---
 
