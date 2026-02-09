@@ -6,7 +6,7 @@ on:
 
 jobs:
   build-and-run:
-    runs-on: ubuntu-latest
+    runs-on: windows-2022
     timeout-minutes: 30
     steps:
     - uses: actions/checkout@v4
@@ -29,19 +29,20 @@ jobs:
         SEAL_TOKEN: ${{ secrets.SEAL_TOKEN }}
 
     - name: Publish Application
-      run: dotnet publish -c Release -o ./publish
+      run: dotnet publish -c Release -r win-x64 -o ./publish
       env:
         SEAL_PROJECT: nuget-demo
         SEAL_TOKEN: ${{ secrets.SEAL_TOKEN }}
 
     - name: Run Server with ngrok
+      shell: pwsh
       run: |
-        wget -q https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-v3-stable-linux-amd64.tgz
-        tar xzf ngrok-v3-stable-linux-amd64.tgz
-        ./ngrok config add-authtoken ${{ secrets.NGROK_AUTHTOKEN }}
-        ./ngrok http --url=sealdemo-nuget.ngrok.dev 5000 &
-        sleep 3
-        echo "App: https://sealdemo-nuget.ngrok.dev"
-        echo ""
-        echo "This demo uses Newtonsoft.Json 12.0.2 (CVE-2024-21907)"
-        dotnet ./publish/seal-security-nuget-demo.dll
+        Invoke-WebRequest -Uri https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-v3-stable-windows-amd64.zip -OutFile ngrok.zip
+        Expand-Archive ngrok.zip -DestinationPath .
+        .\ngrok.exe config add-authtoken ${{ secrets.NGROK_AUTHTOKEN }}
+        Start-Process -FilePath .\ngrok.exe -ArgumentList 'http','--url=sealdemo-nuget.ngrok.dev','5000' -NoNewWindow
+        Start-Sleep -Seconds 3
+        Write-Host "App: https://sealdemo-nuget.ngrok.dev"
+        Write-Host ""
+        Write-Host "This demo uses Newtonsoft.Json 12.0.2 (CVE-2024-21907)"
+        dotnet .\publish\seal-security-nuget-demo.dll
