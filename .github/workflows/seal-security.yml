@@ -1,0 +1,78 @@
+name: Seal Security Remediation
+
+on:
+  workflow_dispatch:
+    inputs:
+      fix_mode:
+        description: 'Fix mode: remote (UI-approved), local (actions file), or all (everything available)'
+        required: true
+        default: 'remote'
+        type: choice
+        options:
+          - remote
+          - local
+          - all
+
+jobs:
+  remediate-and-run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+
+      - name: Configure Seal Security NuGet Feed
+        run: |
+          dotnet nuget add source https://nuget.sealsecurity.io/v3/index.json \
+            --name Seal \
+            --username nuget-demo \
+            --password ${{ secrets.SEAL_TOKEN }} \
+            --store-password-in-clear-text
+
+      - name: Restore Dependencies
+        run: dotnet restore
+        env:
+          SEAL_PROJECT: nuget-demo
+          SEAL_TOKEN: ${{ secrets.SEAL_TOKEN }}
+
+      - name: Seal Security - Fix Vulnerabilities
+        uses: seal-community/cli-action@latest
+        with:
+          mode: fix
+          fix_mode: ${{ github.event.inputs.fix_mode || 'remote' }}
+          target: seal-security-nuget-demo.csproj
+          project: nuget-demo
+          token: ${{ secrets.SEAL_TOKEN }}
+        env:
+          SEAL_SNYK_URL: "https://api.snyk.io"
+          SEAL_SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+
+      - name: Restore with Sealed Packages
+        run: dotnet restore
+        env:
+          SEAL_PROJECT: nuget-demo
+          SEAL_TOKEN: ${{ secrets.SEAL_TOKEN }}
+
+      - name: Build Application
+        run: dotnet build --no-restore
+
+      - name: Publish Application
+        run: dotnet publish -c Release -o ./publish
+
+      - name: Start Application
+        run: |
+          wget -q https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-v3-stable-linux-amd64.tgz
+          tar xzf ngrok-v3-stable-linux-amd64.tgz
+          ./ngrok config add-authtoken ${{ secrets.NGROK_AUTHTOKEN }}
+          ./ngrok http --url=sealdemo-nuget.ngrok.dev 5000 &
+          sleep 3
+          echo "App: https://sealdemo-nuget.ngrok.dev"
+          echo ""
+          echo "Vulnerabilities have been patched by Seal Security!"
+          dotnet ./publish/seal-security-nuget-demo.dll
