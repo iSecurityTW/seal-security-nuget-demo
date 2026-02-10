@@ -243,44 +243,69 @@ dotnet nuget add source https://nuget.sealsecurity.io/v3/index.json \
 
 ---
 
-## Demo Walkthrough
+## Preparations
 
-### GitHub Actions Demo Flow
+### One-time setup
 
-The demo uses two workflow runs to show before/after.
+* Clone this repository
+* Get owner access to the `seal-sec-demo-2` GitHub organization
+* Set up GitHub secrets:
+  * `SEAL_TOKEN` — Your Seal Security API token
+  * `NGROK_AUTHTOKEN` — ngrok auth token (for exposing the app publicly)
 
-The exploit payload is hosted in the companion **[json-payload](https://github.com/seal-sec-demo-2/json-payload)** repo. Paste the payload URL into the name field:
+### Before each demo
+
+* Make sure the `nuget-demo` project exists in your Seal Security dashboard (not archived)
+* Clean up the local state: `git clean -fxd && git checkout main && git reset --hard origin/main`
+* Have the following tabs ready in Chrome:
+  * [Seal Dashboard](https://app.sealsecurity.io/) — show the project and available patches
+  * [GitHub - csproj](https://github.com/seal-sec-demo-2/seal-security-nuget-demo/blob/main/seal-security-nuget-demo.csproj) — show the vulnerable dependencies
+  * [NuGet.org - Newtonsoft.Json](https://www.nuget.org/packages/Newtonsoft.Json) — show version 12.0.2 popularity
+  * [CVE-2024-21907 (NVD)](https://www.cve.org/CVERecord?id=CVE-2024-21907) — shows 7.5 HIGH severity
+  * [Newtonsoft.Json 13.0.1 release notes](https://github.com/JamesNK/Newtonsoft.Json/releases/tag/13.0.1) — why upgrading is hard
+* GitHub Actions tabs:
+  * [Seal Security Remediation](https://github.com/seal-sec-demo-2/seal-security-nuget-demo/actions/workflows/seal-security.yml) — runs patched app
+
+---
+
+## Demo Flow
+
+### Part 1: Show the vulnerability (unpatched)
+
+1. **Show the project** — Open GitHub csproj tab, briefly explain the dependencies (ASP.NET Core, Newtonsoft.Json, log4net, etc.)
+2. **Run the unpatched app** — Trigger the "Seal Security Remediation" workflow with remote rules **cleared** (nothing gets patched)
+3. **Show version popularity** — Switch to NuGet.org tab, show Newtonsoft.Json download stats
+4. **Normal usage** — Go to [https://sealdemo-nuget.ngrok.dev](https://sealdemo-nuget.ngrok.dev), type `alice`, click Go → shows **"Welcome, alice!"**
+5. **Explain the vulnerability** — Newtonsoft.Json 12.0.2 has CVE-2024-21907 (7.5 HIGH) — Denial of Service via stack overflow
+6. **Demonstrate the exploit** — Paste the payload URL (below), click Go → **connection reset, app crashes**
+
+### Exploit payload
 
 ```
 https://raw.githubusercontent.com/seal-sec-demo-2/json-payload/main/payload.json
 ```
 
-#### Run 1: Without Seal (Vulnerable)
+### Part 2: Fix with Seal (patched)
 
-1. Make sure the remote rules in the Seal UI are **cleared** (no fixes selected)
-2. Trigger the workflow: **Actions → Seal Security Remediation → Run workflow** (default mode: `remote`)
-3. The workflow runs `seal fix --mode remote` — with no rules set, nothing gets patched
-4. The app starts at https://sealdemo-nuget.ngrok.dev
-5. Paste the payload URL into the name field and click **Go**
-6. The browser shows an error / connection reset — the process is dead
-7. The app crashed with `StackOverflowException` in `JsonSerializerInternalReader.CreateValueInternal`
+1. **Show the problem with upgrading** — Open Newtonsoft.Json 13.0.1 release notes tab, explain it's not a simple version bump
+2. **Show Seal's solution** — Open Seal Dashboard, show `Newtonsoft.Json 12.0.2-sp1` is available
+3. **Approve remediation** — In the Seal UI, approve Newtonsoft.Json 12.0.2 → 12.0.2-sp1
+4. **Run the patched app** — Re-trigger the "Seal Security Remediation" workflow (same settings)
+5. **Test the exploit again** — Paste the same payload URL → **"Blocked by Seal patch: MaxDepth of 64 has been exceeded."** (server keeps running)
 
-#### Run 2: With Seal (Patched)
+### What to expect
 
-1. Go to the Seal UI and **approve remediation** for Newtonsoft.Json 12.0.2 → 12.0.2-sp1
-2. Re-trigger the workflow (same settings)
-3. This time `seal fix --mode remote` patches Newtonsoft.Json to 12.0.2-sp1
-4. The app starts at https://sealdemo-nuget.ngrok.dev
-5. Paste the same payload URL and click **Go**
-6. The app returns an error message ("Blocked by Seal patch: MaxDepth...") but stays running
-7. The browser at https://sealdemo-nuget.ngrok.dev still works — app stays up for 20 minutes
+| Scenario | Result |
+|----------|--------|
+| **Unpatched** (Newtonsoft.Json 12.0.2) | Browser shows connection reset / error — app crashed with `StackOverflowException` (process dead) |
+| **Seal-patched** (Newtonsoft.Json 12.0.2-sp1) | Page shows **"Blocked by Seal patch: MaxDepth of 64 has been exceeded."** — server keeps running |
 
-### Test with Normal Input
+### Key talking points
 
-1. Go to https://sealdemo-nuget.ngrok.dev (or http://localhost:5000 locally)
-2. Type `alice` in the name field
-3. Click **Go**
-4. You should see: **"Welcome, alice!"**
+* **No code changes** — The application code is identical. Only the NuGet package was swapped.
+* **Same API** — `12.0.2-sp1` is a drop-in replacement for `12.0.2`
+* **Defense in depth** — Protects all code paths, including transitive dependencies
+* **Public patches** — All patches are open source and auditable
 
 ---
 
