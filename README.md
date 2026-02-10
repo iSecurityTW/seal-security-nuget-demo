@@ -36,7 +36,7 @@ var config = JsonConvert.DeserializeObject<NestedConfig>(name);
 https://raw.githubusercontent.com/seal-sec-demo-2/json-payload/main/payload.json
 ```
 
-The app detects it's a URL, fetches the [json-payload](https://github.com/seal-sec-demo-2/json-payload) (deeply nested JSON `{"n":{"n":{...}}}`, mirroring the Maven demo's [yaml-payload](https://github.com/seal-sec-demo-2/yaml-payload)), and deserializes it through Newtonsoft.Json into the recursive `NestedConfig` class — triggering the stack overflow.
+The app detects it's a URL, fetches the [json-payload](https://github.com/seal-sec-demo-2/json-payload) (deeply nested JSON `{"n":{"n":{...}}}`), and deserializes it through Newtonsoft.Json into the recursive `NestedConfig` class — triggering the stack overflow.
 
 The `JsonSerializerInternalReader` recurses through `CreateValueInternal → CreateObject → PopulateObject → SetPropertyValue` for every nesting level. At ~5,000 levels deep, this exhausts the thread stack and the application crashes with a `StackOverflowException` — the process dies instantly (no graceful error handling possible).
 
@@ -122,6 +122,23 @@ dotnet run
 ```
 
 Open [http://localhost:5000](http://localhost:5000) — the app is running with vulnerable dependencies.
+
+### Test with normal input
+
+Go to [http://localhost:5000](http://localhost:5000), type `alice` in the name field, and click **Go**.
+You should see: **"Welcome, alice!"**
+
+### Test with exploit payload
+
+Paste the following URL into the name field and click **Go**:
+
+```
+https://raw.githubusercontent.com/seal-sec-demo-2/json-payload/main/payload.json
+```
+
+**Unpatched result:** The browser shows an error / connection reset — the app crashed with a `StackOverflowException` in `JsonSerializerInternalReader.CreateValueInternal`. The process is dead.
+
+**Patched result (after Seal):** The page shows **"Blocked by Seal patch: MaxDepth of 64 has been exceeded."** — Newtonsoft.Json's patched recursion limit rejected the deep payload. The server continues running normally.
 
 ### 3. Apply Seal Security Fix
 
@@ -230,9 +247,9 @@ dotnet nuget add source https://nuget.sealsecurity.io/v3/index.json \
 
 ### GitHub Actions Demo Flow
 
-This mirrors the Maven demo approach — two workflow runs to show before/after.
+The demo uses two workflow runs to show before/after.
 
-The exploit payload is hosted in the companion **[json-payload](https://github.com/seal-sec-demo-2/json-payload)** repo (same pattern as the Maven demo's [yaml-payload](https://github.com/seal-sec-demo-2/yaml-payload) repo). Paste the payload URL into the name field:
+The exploit payload is hosted in the companion **[json-payload](https://github.com/seal-sec-demo-2/json-payload)** repo. Paste the payload URL into the name field:
 
 ```
 https://raw.githubusercontent.com/seal-sec-demo-2/json-payload/main/payload.json
