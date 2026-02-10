@@ -304,13 +304,13 @@ dotnet --info | Select-String "RID"     # Should show win-x64
 
 ## CLI Version Comparison: v0.3.238 (Windows) vs v0.3.296 (Latest)
 
-Windows Server 2022 uses **v0.3.238** — the last release with a Windows x64 binary. The latest CLI is **v0.3.296** (Linux/macOS only). There are **58 releases** between these versions, with **116 source files changed, 26 added, 2 removed** (excluding tests). Below is a comprehensive breakdown based on a full source-code diff.
+Windows Server 2022 uses **v0.3.238** — the last release with a Windows x64 binary. The latest CLI is **v0.3.296** (Linux/macOS only). There are **58 releases** between these versions, with **113 source files changed, 19 added, and 2 moved** (excluding integration test suites and test fixture data). Below is a comprehensive breakdown based on a full source-code diff.
 
 ---
 
 ### NuGet/.NET Functionality — No Impact
 
-The NuGet remediation code is **virtually identical** between v0.3.238 and v0.3.296. Of the 21 files in the MSIL/NuGet module (`internal/ecosystem/msil/`), only 2 changed — both are trivial interface signature updates (`Prepare()` method receives an unused parameter). The actual fix logic, parsing, downloading, and normalization code is **byte-for-byte identical**.
+The NuGet remediation code is **virtually identical** between v0.3.238 and v0.3.296. Of the 22 files in the MSIL/NuGet module (`internal/ecosystem/msil/`), only 2 changed — both are trivial interface signature updates (`Prepare()` method receives an additional parameter marked as unused with `_`). The actual fix logic, parsing, downloading, and normalization code is **byte-for-byte identical**.
 
 | NuGet Capability | v0.3.238 | v0.3.296 |
 |-----------------|----------|----------|
@@ -403,7 +403,7 @@ The Checkmarx client was **completely rewritten** in v0.3.296 to use OAuth2/OIDC
 | Realm extraction | ❌ | ✅ Auto-extracted from JWT issuer claim |
 | IAM URL derivation | ❌ | ✅ `ast.checkmarx.net` → `iam.checkmarx.net` |
 | `jwt` dependency | ❌ | ✅ `github.com/golang-jwt/jwt/v5` |
-| Token caching | ❌ | ✅ Cached with expiry tracking |
+| Token caching | ❌ | ✅ Cached per-process (`tokenExpiry` stored but not enforced for refresh) |
 | Form-encoded requests | ❌ | ✅ New `sendFormRequest()` for token endpoint |
 
 **Impact:** If using Checkmarx integration on Windows with v0.3.238, the old direct-token auth is used. If Checkmarx migrates to require OIDC-only auth, v0.3.238 would break. For NuGet-only workflows without Checkmarx integration, **no impact**.
@@ -456,12 +456,12 @@ The Go ecosystem fixer received significant changes in v0.3.296:
 
 | Feature | v0.3.238 | v0.3.296 |
 |---------|----------|----------|
-| `go.mod` update after fix | ✅ (always) | ✅ (configurable via `dont-change-go-mod`) |
+| `go.mod` update after fix | ❌ (backed up for rollback only) | ✅ `updateVersionInModFile()` runs `go mod edit` with `require`/`dropreplace` |
 | `vendor/modules.txt` update | ❌ | ✅ `updateVersionInModulesFile()` — regex-based version replacement |
-| `go mod edit` for version changes | ❌ | ✅ `updateVersionInModFile()` — proper `require`/`dropreplace` handling |
-| Rename uses sealed version | ❌ (used vulnerable version) | ✅ Bug fix — uses `AvailableFix.Version` |
+| `renamePackage()` version reference | Uses `VulnerablePackage.Version` | Bug fix — uses `AvailableFix.Version` |
+| `dont-change-go-mod` config option | N/A (go.mod never modified) | ✅ Skips go.mod/modules.txt updates while still sealing vendor code |
 
-**Impact:** None for NuGet. Go Modules users on v0.3.238 will have a less complete fix (go.mod and modules.txt may not be updated, rename may reference wrong version).
+**Impact:** None for NuGet. Go Modules users on v0.3.238 will have a less complete fix (go.mod is never updated, modules.txt is not updated, and `renamePackage` may reference the wrong version).
 
 ---
 
@@ -527,7 +527,7 @@ v0.3.296 filters silence rules to match the current package manager's ecosystem.
 | `GET /unauthenticated/v1/signature/public_key` | ✅ Used | ❌ Removed (key embedded in binary) |
 | `GET /authenticated/v1/logs/upload/generate-post-url` | N/A | ✅ New (log upload) |
 | `GetClient()` accessor on `CliServer` | ❌ | ✅ New |
-| All API methods | Value receivers `(s CliServer)` | **Pointer receivers** `(s *CliServer)` |
+| Most API methods | Value receivers `(s CliServer)` | **Pointer receivers** `(s *CliServer)` |
 | `SilenceRule.SealedVersion` field | ❌ | ✅ New optional field |
 
 **Impact:** The API receiver change (value → pointer) is an internal optimization. The removed `GetPublicKey` endpoint is a potential future concern (see Signature Verification section above).
@@ -542,7 +542,7 @@ v0.3.296 introduces new `.seal-config.yml` sections:
 |----------------|----------|----------|---------|
 | `java-files.skip-directory-changes` | ❌ | ✅ | Skip dir changes during Java files fix |
 | `rpm.no-gpg-install` | ❌ | ✅ | Skip GPG key installation for RPM |
-| `bundler.prod-only` | ❌ | ✅ | Only scan production Ruby deps |
+| `bundler.prod-only` | ❌ | ✅ | Only scan production Ruby deps (`prod-only` tag existed for other ecosystems; new for Bundler) |
 | `golang.dont-change-go-mod` | ❌ | ✅ | Seal vendor without modifying go.mod |
 | `maven.copy-entire-m2-cache` | ❌ | ✅ | Revert to recursive cache linking |
 | `maven.skip-directory-changes` | ❌ | ✅ | Skip dir changes during Maven fix |
@@ -577,7 +577,7 @@ v0.3.296 introduces new `.seal-config.yml` sections:
 | **BlackDuck** | CVE extraction, package manager mapping | Low* | None unless using BlackDuck |
 | **Snyk** | Multi-project support | Low* | None unless using Snyk |
 | **SentinelOne** | Tag filter removed from policy query | Low* | None unless using SentinelOne |
-| **Go Modules** | go.mod/modules.txt updates, rename fix | Medium* | None — different ecosystem |
+| **Go Modules** | go.mod + modules.txt updates, rename bug fix | Medium* | None — different ecosystem |
 | **Maven** | Selective cache linking (performance) | Low* | None — different ecosystem |
 | **NPM** | UUID rollback dirs for scoped packages | Low* | None — different ecosystem |
 | **Containers** | Image `--squash` flag | Low | None |
@@ -586,7 +586,7 @@ v0.3.296 introduces new `.seal-config.yml` sections:
 
 \* *Severity marked for the relevant ecosystem — not applicable to NuGet.*
 
-> **The v0.3.238 CLI is fully capable for NuGet/.NET vulnerability remediation on Windows Server 2022.** The 58 releases between v0.3.238 and v0.3.296 contain 116 changed source files, but none of the changes affect NuGet fix logic. The most significant differences are: Ruby ecosystem support, the Checkmarx auth rewrite, Go Modules fix improvements, Maven cache optimization, embedded signature key/AWS CA bundle, and remote log upload. None of these impact the NuGet remediation workflow that will be used on this Windows server.
+> **The v0.3.238 CLI is fully capable for NuGet/.NET vulnerability remediation on Windows Server 2022.** The 58 releases between v0.3.238 and v0.3.296 contain 113 changed source files, but none of the changes affect NuGet fix logic. The most significant differences are: Ruby ecosystem support, the Checkmarx auth rewrite, Go Modules fix improvements, Maven cache optimization, embedded signature key/AWS CA bundle, and remote log upload. None of these impact the NuGet remediation workflow that will be used on this Windows server.
 
 ---
 
