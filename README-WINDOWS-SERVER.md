@@ -617,3 +617,125 @@ v0.3.296 introduces new `.seal-config.yml` sections:
 | Newtonsoft.Json | 12.0.2 | 12.0.2-sp1 | CVE-2024-21907 | HIGH (7.5) |
 | log4net | 2.0.5 | 2.0.5-sp1 | CVE-2018-1285 | CRITICAL (9.8) |
 | System.Net.Http | 4.3.0 | 4.3.0-sp1 | CVE-2017-0249 | HIGH (7.3) |
+
+---
+
+## Appendix A — Network Requirements & Connectivity
+
+> Reference: [Seal Security — Step-by-Step Setup Guide (Scenario A: No Private Artifact Server)](https://docs.sealsecurity.io/cli-integration/step-by-step-setup-guide#scenario-a-no-private-artifact-server)
+
+### Hardware / OS Compatibility
+
+Nothing about the Windows Server 2022 Standard hardware (Xeon Gold 5215, 8GB RAM, x64) or OS version (21H2) blocks Seal CLI operation. The requirements are:
+
+1. **.NET 9.0 SDK** (x64) — for building the demo app
+2. **Seal CLI v0.3.238** (Windows x64) — last release with a Windows binary
+3. **Outbound HTTPS access (TCP 443)** — to Seal's services and NuGet registries
+
+### Outbound Endpoints (Egress Allowlist)
+
+All Seal CLI operations are **outbound-only**. The following endpoints must be reachable on **port 443** from the Windows Server. These hostnames are hardcoded in the CLI source (`internal/api/seal.go`):
+
+| Endpoint | Purpose | Required for NuGet Demo |
+|----------|---------|------------------------|
+| `cli.sealsecurity.io` | Seal CLI backend API (project init, remote config, fix queries, signature verification) | **Yes** |
+| `authorization.sealsecurity.io` | JWT token validation | **Yes** |
+| `nuget.sealsecurity.io` | Seal NuGet artifact server — serves `-sp1` sealed packages | **Yes** |
+| `api.nuget.org` | Public NuGet registry — serves original vulnerable packages | **Yes** |
+| `github.com` | One-time CLI binary download (`seal-windows-amd64-v0.3.238.exe`) | One-time only |
+| `login.sealsecurity.io` | JWT issuer (referenced in token's `iss` claim) | No (not called by CLI) |
+| `npm.sealsecurity.io` | NPM artifact server | No (NuGet only) |
+| `pypi.sealsecurity.io` | PyPI artifact server | No (NuGet only) |
+| `maven.sealsecurity.io` | Maven artifact server | No (NuGet only) |
+| `go.sealsecurity.io` | Go proxy artifact server | No (NuGet only) |
+| `packagist.sealsecurity.io` | Composer/PHP artifact server | No (NuGet only) |
+| `rpm.sealsecurity.io` | RPM artifact server | No (NuGet only) |
+| `deb.sealsecurity.io` | Debian/APT artifact server | No (NuGet only) |
+| `apk.sealsecurity.io` | Alpine APK artifact server | No (NuGet only) |
+
+**Minimum allowlist for this demo (4 hosts):**
+
+```
+cli.sealsecurity.io:443
+authorization.sealsecurity.io:443
+nuget.sealsecurity.io:443
+api.nuget.org:443
+```
+
+If using a wildcard-capable firewall: `*.sealsecurity.io:443` + `api.nuget.org:443`.
+
+### Quick Verification (on the VM)
+
+```powershell
+# Confirm .NET SDK
+dotnet --info
+
+# Confirm Seal CLI
+seal --version
+
+# Test outbound connectivity
+Test-NetConnection cli.sealsecurity.io -Port 443
+Test-NetConnection authorization.sealsecurity.io -Port 443
+Test-NetConnection nuget.sealsecurity.io -Port 443
+Test-NetConnection api.nuget.org -Port 443
+```
+
+If any test shows `TcpTestSucceeded: False`, that endpoint is blocked and needs to be allowlisted.
+
+### Inbound Connectivity — Not Required
+
+**Seal CLI requires zero inbound ports.** All communication is client-initiated outbound HTTPS. The CLI:
+
+1. Sends outbound requests to `cli.sealsecurity.io` (remote config, fix rules, project init)
+2. Downloads sealed `.nupkg` packages from `nuget.sealsecurity.io`
+3. Downloads original packages from `api.nuget.org`
+
+No Seal service ever calls back into the server. No webhooks, no callbacks, no listening ports are needed for Seal CLI operation.
+
+### Accessing the Demo App Without Inbound
+
+The demo app listens on `http://localhost:5000`. If inbound traffic to the VM is blocked, there are several options to demonstrate the app is running:
+
+| Method | Inbound Required | Setup |
+|--------|-----------------|-------|
+| **RDP + local browser** | No (uses existing RDP session) | Open `http://localhost:5000` in browser on the VM via RDP |
+| **`curl` / `Invoke-WebRequest` on VM** | No | `Invoke-WebRequest -Uri http://localhost:5000` from PowerShell |
+| **Cloudflare Tunnel** | No | `cloudflared tunnel --url http://localhost:5000` gives a public HTTPS URL |
+| **ngrok** | No | `ngrok http 5000` gives a public HTTPS URL (already configured in CI workflow) |
+| **SSH port forward** | No (if SSH outbound is allowed) | From external: `ssh -L 5000:localhost:5000 user@vm` |
+| **Open firewall port 5000** | Yes | `New-NetFirewallRule -LocalPort 5000 -Direction Inbound -Action Allow` |
+
+**Recommended for this demo:** Use **RDP + local browser**. Since you're already RDP'd into the Windows Server to run commands, simply open `http://localhost:5000` in the browser on the VM. This requires zero inbound firewall changes and proves the app is running with sealed dependencies.
+
+If you need to show the app to someone who doesn't have RDP access, use **ngrok** or **Cloudflare Tunnel** — both work by establishing an outbound connection to their proxy service, so no inbound ports are needed.
+
+### NuGet Config Validation
+
+Our [`nuget.config`](nuget.config) matches the official Seal documentation for **Scenario A (No Private Artifact Server)** exactly:
+
+```xml
+<configuration>
+  <packageSources>
+    <add key="Seal" value="https://nuget.sealsecurity.io/v3/index.json" />
+    <add key="nuget.org" value="https://api.nuget.org/v3/index.json" />
+  </packageSources>
+  <packageSourceCredentials>
+    <Seal>
+      <add key="Username" value="%SEAL_PROJECT%" />
+      <add key="ClearTextPassword" value="%SEAL_TOKEN%" />
+    </Seal>
+  </packageSourceCredentials>
+</configuration>
+```
+
+Per the [official docs](https://docs.sealsecurity.io/cli-integration/step-by-step-setup-guide#scenario-a-no-private-artifact-server), `%SEAL_PROJECT%` and `%SEAL_TOKEN%` are resolved from environment variables by the NuGet client. Seal is listed first to prioritize sealed versions; standard packages are proxied through or fall back to `api.nuget.org`.
+
+### If Egress Is Fully Blocked (Air-Gapped)
+
+For environments with no outbound internet access at all, the Seal docs describe **Scenario C: Other / Manual**:
+
+1. Download sealed `.nupkg` artifacts from the Seal Protection page UI (on a machine with internet)
+2. Upload them to an internal NuGet server (e.g., Azure Artifacts, ProGet, or a file share)
+3. Point `nuget.config` at the internal source
+
+This eliminates all runtime dependency on Seal's cloud services but requires manual artifact management. The Seal CLI itself would not run in this mode — only the pre-downloaded sealed packages are used.
