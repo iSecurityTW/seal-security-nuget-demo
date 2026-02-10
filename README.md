@@ -260,23 +260,6 @@ Unlike the Maven demo (where the exploit payload is a short YAML string you past
    ```
 7. The browser at https://sealdemo-nuget.ngrok.dev still works — app stays up for 20 minutes
 
-### The Vulnerability — CVE-2024-21907
-
-Newtonsoft.Json uses recursive descent parsing. Deeply nested JSON exhausts the call stack:
-
-```
-{"n":{"n":{"n":{"n":{"n":{"n":...5000+ levels...}}}}}}
-```
-
-The required depth varies by platform:
-- **Windows x64** (GitHub Actions, 1MB default thread stack): ~2000–5000 depth
-- **macOS ARM64** (M-series, 8MB stack): ~15000+ depth
-
-The payload is hosted at [`seal-sec-demo-2/json-payload`](https://github.com/seal-sec-demo-2/json-payload) — the workflow downloads it automatically.
-
-**Without Seal:** `StackOverflowException` → process crash → Denial of Service  
-**With Seal (12.0.2-sp1):** Recursion depth is capped, exception handled gracefully → app stays up
-
 ### Test with Normal Input
 
 1. Go to https://sealdemo-nuget.ngrok.dev (or http://localhost:5000 locally)
