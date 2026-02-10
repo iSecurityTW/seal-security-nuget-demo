@@ -95,7 +95,16 @@ jobs:
           Write-Host "=============================================="
           Write-Host "App: https://sealdemo-nuget.ngrok.dev"
           Write-Host "=============================================="
-          Write-Host "Vulnerabilities have been patched by Seal Security!"
+          Write-Host ""
+          Write-Host "To test CVE-2024-21907 (Newtonsoft.Json DoS):"
+          Write-Host "Paste the following deeply nested JSON into the name field and click Go:"
+          Write-Host ""
+          $payload = '{"n":' * 800 + '1' + '}' * 800
+          Write-Host $payload
+          Write-Host ""
+          Write-Host "Without Seal: the server crashes (StackOverflowException)"
+          Write-Host "With Seal:    the input is parsed safely"
+          Write-Host ""
           Write-Host "App will stay live for 20 minutes."
           Write-Host ""
 

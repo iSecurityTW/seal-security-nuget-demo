@@ -223,18 +223,57 @@ dotnet nuget add source https://nuget.sealsecurity.io/v3/index.json \
 
 ## Demo Walkthrough
 
+### GitHub Actions Demo Flow
+
+This mirrors the Maven demo approach — two workflow runs to show before/after:
+
+#### Run 1: Without Seal (Vulnerable)
+
+1. Make sure the remote rules in the Seal UI are **cleared** (no fixes selected)
+2. Trigger the workflow: **Actions → Seal Security Remediation → Run workflow** (default mode: `remote`)
+3. The workflow runs `seal fix --mode remote` — with no rules set, nothing gets patched
+4. The app starts at https://sealdemo-nuget.ngrok.dev
+5. **Inject the payload** — paste this deeply nested JSON into the name field and click **Go**:
+
+```
+{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":1}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}
+```
+
+6. The server **crashes** with a `StackOverflowException` — the browser shows an error page
+7. Check the GH Action logs to see the crash details
+
+#### Run 2: With Seal (Patched)
+
+1. Go to the Seal UI and **approve remediation** for Newtonsoft.Json 12.0.2 → 12.0.2-sp1
+2. Re-trigger the workflow (same settings)
+3. This time `seal fix --mode remote` patches Newtonsoft.Json to 12.0.2-sp1
+4. The app starts again at https://sealdemo-nuget.ngrok.dev
+5. **Paste the same payload** into the name field and click **Go**
+6. The app **handles it safely** — no crash, displays the parsed result
+
+### The Payload — CVE-2024-21907
+
+The exploit is deeply nested JSON. When Newtonsoft.Json recursively parses this, it exhausts the call stack:
+
+```
+{"n":{"n":{"n":{"n":{"n":{"n":...100+ levels...}}}}}}
+```
+
+You can generate a payload with any depth using Python:
+
+```bash
+python3 -c "d=800; print('{\"n\":'*d + '1' + '}'*d)"
+```
+
+**Without Seal:** `StackOverflowException` → process crash → Denial of Service  
+**With Seal (12.0.2-sp1):** Recursion depth is capped, exception handled gracefully → app stays up
+
 ### Test with Normal Input
 
-1. Go to [http://localhost:5000](http://localhost:5000)
+1. Go to https://sealdemo-nuget.ngrok.dev (or http://localhost:5000 locally)
 2. Type `alice` in the name field
 3. Click **Go**
 4. You should see: **"Welcome, alice!"**
-
-### Test the JSON API
-
-```bash
-curl "http://localhost:5000/api/parse?json={\"test\":\"value\"}"
-```
 
 ---
 

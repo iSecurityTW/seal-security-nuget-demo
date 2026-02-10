@@ -30,14 +30,21 @@ public class HelloController : ControllerBase
 
     private string Greeting(string name)
     {
-        // Parse the name through Newtonsoft.Json — mirrors the Maven demo's SnakeYAML usage.
-        // With unpatched 12.0.2, deeply nested JSON input triggers CVE-2024-21907
-        // (StackOverflowException → process crash → browser shows error page,
-        //  crash details visible in GH Action logs).
-        // With Seal-patched 12.0.2-sp1, the same input is parsed safely.
-        var json = $"{{\"name\": \"{EscapeJsonString(name)}\"}}";
-        var parsed = JsonConvert.DeserializeObject<JToken>(json);
-        var displayName = parsed?["name"]?.ToString() ?? name;
+        // Parse the raw input through Newtonsoft.Json — mirrors Maven demo's yaml.load(name).
+        // If input is valid JSON, it gets deserialized (triggering CVE-2024-21907 on deep nesting).
+        // If not valid JSON, we just use it as-is.
+        // With unpatched 12.0.2: deeply nested JSON → StackOverflowException → process crash
+        // With Seal-patched 12.0.2-sp1: same input parsed safely
+        string displayName;
+        try
+        {
+            var parsed = JsonConvert.DeserializeObject<JToken>(name);
+            displayName = parsed?.ToString(Formatting.None) ?? name;
+        }
+        catch
+        {
+            displayName = name;
+        }
 
         Logger.Info($"Greeting: {displayName}");
 
@@ -67,15 +74,5 @@ public class HelloController : ControllerBase
                 .Replace("<", "&lt;")
                 .Replace(">", "&gt;")
                 .Replace("\"", "&quot;");
-    }
-
-    private static string EscapeJsonString(string s)
-    {
-        if (string.IsNullOrEmpty(s)) return "";
-        return s.Replace("\\", "\\\\")
-                .Replace("\"", "\\\"")
-                .Replace("\n", "\\n")
-                .Replace("\r", "\\r")
-                .Replace("\t", "\\t");
     }
 }
