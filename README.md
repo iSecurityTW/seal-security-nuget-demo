@@ -237,7 +237,7 @@ Unlike the Maven demo (where the exploit payload is a short YAML string you past
 2. Trigger the workflow: **Actions → Seal Security Remediation → Run workflow** (default mode: `remote`)
 3. The workflow runs `seal fix --mode remote` — with no rules set, nothing gets patched
 4. The app starts at https://sealdemo-nuget.ngrok.dev
-5. The workflow automatically sends a 5000-depth nested JSON payload to the app
+5. The workflow automatically fetches the [5000-depth nested JSON payload](https://github.com/seal-sec-demo-2/json-payload) and sends it to the app
 6. **In the logs you'll see:**
    ```
    RESULT: Server CRASHED - CVE-2024-21907 exploited!
@@ -251,7 +251,7 @@ Unlike the Maven demo (where the exploit payload is a short YAML string you past
 2. Re-trigger the workflow (same settings)
 3. This time `seal fix --mode remote` patches Newtonsoft.Json to 12.0.2-sp1
 4. The app starts at https://sealdemo-nuget.ngrok.dev
-5. The workflow sends the same 5000-depth payload
+5. The workflow sends the same [5000-depth payload](https://github.com/seal-sec-demo-2/json-payload)
 6. **In the logs you'll see:**
    ```
    RESULT: App handled the payload safely (HTTP 200)
