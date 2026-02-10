@@ -2,7 +2,7 @@
 
 ## Overview
 
-This demo application is a simple ASP.NET Core welcome page that uses **Newtonsoft.Json 12.0.2** to parse user input. The app has a name field — type your name, click Go, and it displays **"Welcome, alice!"**. Under the hood it passes the input through Newtonsoft.Json's `JsonConvert.DeserializeObject()`. That's it — completely standard usage of a popular JSON library.
+This demo application is a simple ASP.NET Core welcome page that uses **Newtonsoft.Json 12.0.2** to parse user input as a config object. The app has a name field — type your name, click Go, and it displays **"Welcome, alice!"**. Under the hood it passes the input through Newtonsoft.Json's `JsonConvert.DeserializeObject<NestedConfig>()`. That's it — completely standard usage of a popular JSON library.
 
 The problem is that Newtonsoft.Json 12.0.2 (and versions before 13.0.1) has **CVE-2024-21907** — a high severity Denial of Service vulnerability with a **CVSS score of 7.5 (HIGH)**. This demo shows how Seal Security patches the vulnerability in-place without requiring a major version upgrade.
 
@@ -12,14 +12,20 @@ The problem is that Newtonsoft.Json 12.0.2 (and versions before 13.0.1) has **CV
 
 ### What is the vulnerability?
 
-Newtonsoft.Json's `JsonConvert.DeserializeObject()` method can be exploited by crafting deeply nested JSON payloads. When parsing these payloads, the library performs recursive descent parsing that can cause **stack overflow**, leading to application crash (Denial of Service).
+Newtonsoft.Json's `JsonConvert.DeserializeObject<T>()` method can be exploited by crafting deeply nested JSON payloads. When deserializing into a typed object (POCO), the library's `JsonSerializerInternalReader` performs truly recursive calls (`CreateValueInternal → CreateObject → PopulateObject → SetPropertyValue → CreateValueInternal`) that cause **stack overflow**, leading to application crash (Denial of Service).
 
 ### How the exploit works
 
 The app takes user input and parses it through Newtonsoft.Json. If the input is a URL, the app fetches the content first — a realistic pattern used by config loaders, API testers, and webhook receivers:
 
 ```csharp
-var parsed = JsonConvert.DeserializeObject<JToken>(name);
+public class NestedConfig
+{
+    [JsonProperty("n")]
+    public NestedConfig? N { get; set; }
+}
+
+var config = JsonConvert.DeserializeObject<NestedConfig>(name);
 ```
 
 **Normal input:** Type `alice` → displays "Welcome, alice!"
@@ -30,9 +36,9 @@ var parsed = JsonConvert.DeserializeObject<JToken>(name);
 https://raw.githubusercontent.com/seal-sec-demo-2/json-payload/main/payload.json
 ```
 
-The app detects it's a URL, fetches the [json-payload](https://github.com/seal-sec-demo-2/json-payload) (deeply nested JSON, mirroring the Maven demo's [yaml-payload](https://github.com/seal-sec-demo-2/yaml-payload)), and parses it through Newtonsoft.Json — triggering the stack overflow.
+The app detects it's a URL, fetches the [json-payload](https://github.com/seal-sec-demo-2/json-payload) (deeply nested JSON `{"n":{"n":{...}}}`, mirroring the Maven demo's [yaml-payload](https://github.com/seal-sec-demo-2/yaml-payload)), and deserializes it through Newtonsoft.Json into the recursive `NestedConfig` class — triggering the stack overflow.
 
-The required depth depends on the platform's thread stack size (~2000–5000 on Windows x64, ~15000+ on macOS ARM64). When the recursion depth exceeds the stack, the application crashes with a `StackOverflowException` — the process dies instantly (no graceful error handling possible).
+The `JsonSerializerInternalReader` recurses through `CreateValueInternal → CreateObject → PopulateObject → SetPropertyValue` for every nesting level. At ~5,000 levels deep, this exhausts the thread stack and the application crashes with a `StackOverflowException` — the process dies instantly (no graceful error handling possible).
 
 ### Real-world impact
 
@@ -238,13 +244,9 @@ https://raw.githubusercontent.com/seal-sec-demo-2/json-payload/main/payload.json
 2. Trigger the workflow: **Actions → Seal Security Remediation → Run workflow** (default mode: `remote`)
 3. The workflow runs `seal fix --mode remote` — with no rules set, nothing gets patched
 4. The app starts at https://sealdemo-nuget.ngrok.dev
-5. Paste the payload URL into the name field and click **Go** (or the workflow does it automatically)
-6. **In the logs you'll see:**
-   ```
-   RESULT: Server CRASHED - CVE-2024-21907 exploited!
-   App is DOWN - process was killed by StackOverflowException - VULNERABLE
-   ```
-7. The browser at https://sealdemo-nuget.ngrok.dev shows an error page (process is dead)
+5. Paste the payload URL into the name field and click **Go**
+6. The browser shows an error / connection reset — the process is dead
+7. The app crashed with `StackOverflowException` in `JsonSerializerInternalReader.CreateValueInternal`
 
 #### Run 2: With Seal (Patched)
 
@@ -252,13 +254,8 @@ https://raw.githubusercontent.com/seal-sec-demo-2/json-payload/main/payload.json
 2. Re-trigger the workflow (same settings)
 3. This time `seal fix --mode remote` patches Newtonsoft.Json to 12.0.2-sp1
 4. The app starts at https://sealdemo-nuget.ngrok.dev
-5. Paste the same payload URL — or the workflow sends it automatically
-6. **In the logs you'll see:**
-   ```
-   RESULT: App handled the payload safely (HTTP 200)
-   Seal Security patch is ACTIVE - CVE-2024-21907 is mitigated!
-   App is still running (HTTP 200) - PATCHED
-   ```
+5. Paste the same payload URL and click **Go**
+6. The app returns an error message ("Blocked by Seal patch: MaxDepth...") but stays running
 7. The browser at https://sealdemo-nuget.ngrok.dev still works — app stays up for 20 minutes
 
 ### Test with Normal Input

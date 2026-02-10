@@ -1,9 +1,20 @@
 using Microsoft.AspNetCore.Mvc;
 using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
 using log4net;
 
 namespace SealSecurityNuGetDemo.Controllers;
+
+/// <summary>
+/// Recursive config model — deserializing deeply nested JSON through this class
+/// forces Newtonsoft.Json's JsonSerializerInternalReader into actual recursive calls
+/// (CreateValueInternal → CreateObject → PopulateObject → CreateValueInternal).
+/// Unlike JToken which parses iteratively, POCO deserialization truly recurses.
+/// </summary>
+public class NestedConfig
+{
+    [JsonProperty("n")]
+    public NestedConfig? N { get; set; }
+}
 
 /// <summary>
 /// Simple welcome page. Takes a name, parses it through Newtonsoft.Json, displays a greeting.
@@ -48,14 +59,25 @@ public class HelloController : ControllerBase
 
     private string Greeting(string name)
     {
-        // Parse input through Newtonsoft.Json — same pattern as Maven demo's yaml.load(name).
-        // With unpatched 12.0.2: deeply nested JSON → StackOverflowException → process crash
-        // With Seal-patched 12.0.2-sp1: same input parsed safely
+        // Deserialize through Newtonsoft.Json into a recursive POCO type.
+        // This forces JsonSerializerInternalReader into actual recursive calls —
+        // unlike JToken which parses iteratively, POCO deserialization truly recurses.
+        //
+        // CVE-2024-21907: Newtonsoft.Json 12.0.2 has MaxDepth=null (unlimited),
+        // so deeply nested JSON causes StackOverflowException → process crash.
+        //
+        // Seal-patched 12.0.2-sp1: MaxDepth defaults to 64, rejects deep JSON
+        // with a catchable JsonReaderException → app stays up.
         string displayName;
         try
         {
-            var parsed = JsonConvert.DeserializeObject<JToken>(name);
-            displayName = parsed?.ToString(Formatting.None) ?? name;
+            var config = JsonConvert.DeserializeObject<NestedConfig>(name);
+            displayName = config != null ? JsonConvert.SerializeObject(config, Formatting.None) : name;
+        }
+        catch (JsonReaderException ex) when (ex.Message.Contains("MaxDepth") || ex.Message.Contains("depth"))
+        {
+            // Seal-patched version catches this — app survives
+            displayName = $"Blocked by Seal patch: {ex.Message}";
         }
         catch
         {
