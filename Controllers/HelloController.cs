@@ -94,10 +94,6 @@ public class HelloController : ControllerBase
             "<input type=\"text\" name=\"name\" class=\"form-control\" placeholder=\"Enter your name\" value=\"\">" +
             "<button type=\"submit\" class=\"btn btn-primary\">Go</button>" +
             "</div>" +
-            "<div class=\"input-group mb-3\">" +
-            "<input type=\"text\" name=\"url\" class=\"form-control\" placeholder=\"Or load JSON from URL\" value=\"\">" +
-            "<button type=\"submit\" class=\"btn btn-outline-secondary\">Load</button>" +
-            "</div>" +
             "</form>" +
             "</div>" +
             "</body>" +
