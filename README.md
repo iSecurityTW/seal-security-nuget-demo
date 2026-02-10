@@ -24,14 +24,18 @@ var parsed = JsonConvert.DeserializeObject<JToken>(name);
 
 **Normal input:** Type `alice` → displays "Welcome, alice!"
 
-**Exploit — paste deeply nested JSON into the name field:**
+**Exploit — send deeply nested JSON (thousands of levels):**
 ```
-{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":1}}}}}}}}}}}}}}}}}}}}
+{"n":{"n":{"n":{"n":{"n":{"n":...5000+ levels...}}}}}}
 ```
 
-Generate a payload with any depth: `python3 -c "d=800; print('{\"n\":'*d + '1' + '}'*d)"`
+The exploit payload is hosted in the companion **[json-payload](https://github.com/seal-sec-demo-2/json-payload)** repo (mirroring the Maven demo's [yaml-payload](https://github.com/seal-sec-demo-2/yaml-payload) pattern). The workflow auto-fetches it:
 
-When the recursion depth exceeds the stack size, the application crashes with a `StackOverflowException`.
+```
+https://raw.githubusercontent.com/seal-sec-demo-2/json-payload/main/payload.json
+```
+
+The required depth depends on the platform's thread stack size (~2000–5000 on Windows x64, ~15000+ on macOS ARM64). When the recursion depth exceeds the stack, the application crashes with a `StackOverflowException` — the process dies instantly (no graceful error handling possible).
 
 ### Real-world impact
 
@@ -223,7 +227,9 @@ dotnet nuget add source https://nuget.sealsecurity.io/v3/index.json \
 
 ### GitHub Actions Demo Flow
 
-This mirrors the Maven demo approach — two workflow runs to show before/after:
+This mirrors the Maven demo approach — two workflow runs to show before/after.
+
+Unlike the Maven demo (where the exploit payload is a short YAML string you paste into the browser), CVE-2024-21907 requires a **deeply nested JSON payload** — thousands of levels deep — to overflow the stack. The payload is hosted in the companion **[json-payload](https://github.com/seal-sec-demo-2/json-payload)** repo (same pattern as the Maven demo's [yaml-payload](https://github.com/seal-sec-demo-2/yaml-payload) repo). The workflow **automatically fetches and sends the payload** after starting the app, so the crash (or safe handling) is visible right in the GitHub Actions logs.
 
 #### Run 1: Without Seal (Vulnerable)
 
@@ -231,37 +237,42 @@ This mirrors the Maven demo approach — two workflow runs to show before/after:
 2. Trigger the workflow: **Actions → Seal Security Remediation → Run workflow** (default mode: `remote`)
 3. The workflow runs `seal fix --mode remote` — with no rules set, nothing gets patched
 4. The app starts at https://sealdemo-nuget.ngrok.dev
-5. **Inject the payload** — paste this deeply nested JSON into the name field and click **Go**:
-
-```
-{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":1}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}
-```
-
-6. The server **crashes** with a `StackOverflowException` — the browser shows an error page
-7. Check the GH Action logs to see the crash details
+5. The workflow automatically sends a 5000-depth nested JSON payload to the app
+6. **In the logs you'll see:**
+   ```
+   RESULT: Server CRASHED - CVE-2024-21907 exploited!
+   App is DOWN - process was killed by StackOverflowException - VULNERABLE
+   ```
+7. The browser at https://sealdemo-nuget.ngrok.dev shows an error page (process is dead)
 
 #### Run 2: With Seal (Patched)
 
 1. Go to the Seal UI and **approve remediation** for Newtonsoft.Json 12.0.2 → 12.0.2-sp1
 2. Re-trigger the workflow (same settings)
 3. This time `seal fix --mode remote` patches Newtonsoft.Json to 12.0.2-sp1
-4. The app starts again at https://sealdemo-nuget.ngrok.dev
-5. **Paste the same payload** into the name field and click **Go**
-6. The app **handles it safely** — no crash, displays the parsed result
+4. The app starts at https://sealdemo-nuget.ngrok.dev
+5. The workflow sends the same 5000-depth payload
+6. **In the logs you'll see:**
+   ```
+   RESULT: App handled the payload safely (HTTP 200)
+   Seal Security patch is ACTIVE - CVE-2024-21907 is mitigated!
+   App is still running (HTTP 200) - PATCHED
+   ```
+7. The browser at https://sealdemo-nuget.ngrok.dev still works — app stays up for 20 minutes
 
-### The Payload — CVE-2024-21907
+### The Vulnerability — CVE-2024-21907
 
-The exploit is deeply nested JSON. When Newtonsoft.Json recursively parses this, it exhausts the call stack:
+Newtonsoft.Json uses recursive descent parsing. Deeply nested JSON exhausts the call stack:
 
 ```
-{"n":{"n":{"n":{"n":{"n":{"n":...100+ levels...}}}}}}
+{"n":{"n":{"n":{"n":{"n":{"n":...5000+ levels...}}}}}}
 ```
 
-You can generate a payload with any depth using Python:
+The required depth varies by platform:
+- **Windows x64** (GitHub Actions, 1MB default thread stack): ~2000–5000 depth
+- **macOS ARM64** (M-series, 8MB stack): ~15000+ depth
 
-```bash
-python3 -c "d=800; print('{\"n\":'*d + '1' + '}'*d)"
-```
+The payload is hosted at [`seal-sec-demo-2/json-payload`](https://github.com/seal-sec-demo-2/json-payload) — the workflow downloads it automatically.
 
 **Without Seal:** `StackOverflowException` → process crash → Denial of Service  
 **With Seal (12.0.2-sp1):** Recursion depth is capped, exception handled gracefully → app stays up

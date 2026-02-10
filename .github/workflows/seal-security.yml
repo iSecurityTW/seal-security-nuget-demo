@@ -96,16 +96,39 @@ jobs:
           Write-Host "App: https://sealdemo-nuget.ngrok.dev"
           Write-Host "=============================================="
           Write-Host ""
-          Write-Host "To test CVE-2024-21907 (Newtonsoft.Json DoS):"
-          Write-Host "Paste the following deeply nested JSON into the name field and click Go:"
+
+          # Download the CVE-2024-21907 payload from the json-payload repo
+          # (same pattern as Maven demo's yaml-payload repo)
+          Write-Host "Downloading CVE-2024-21907 payload from https://github.com/seal-sec-demo-2/json-payload ..."
+          $payload = (Invoke-WebRequest -Uri "https://raw.githubusercontent.com/seal-sec-demo-2/json-payload/main/payload.json" -UseBasicParsing).Content
+          Write-Host "Payload downloaded (5000-depth nested JSON, $($payload.Length) bytes)"
+          Write-Host "Sending payload to app..."
           Write-Host ""
-          $payload = '{"n":' * 800 + '1' + '}' * 800
-          Write-Host $payload
+
+          try {
+            $body = "name=$([System.Uri]::EscapeDataString($payload))"
+            $response = Invoke-WebRequest -Uri http://localhost:5000/ -Method POST -Body $body -ContentType 'application/x-www-form-urlencoded' -UseBasicParsing -TimeoutSec 30
+            Write-Host "RESULT: App handled the payload safely (HTTP $($response.StatusCode))"
+            Write-Host "Seal Security patch is ACTIVE - CVE-2024-21907 is mitigated!"
+          } catch {
+            Write-Host "RESULT: Server CRASHED - CVE-2024-21907 exploited!"
+            Write-Host "The deeply nested JSON caused a StackOverflowException (Denial of Service)"
+            Write-Host "Error: $_"
+          }
+
           Write-Host ""
-          Write-Host "Without Seal: the server crashes (StackOverflowException)"
-          Write-Host "With Seal:    the input is parsed safely"
+
+          # Check if app is still alive
+          Start-Sleep -Seconds 3
+          try {
+            $check = Invoke-WebRequest -Uri http://localhost:5000 -UseBasicParsing -TimeoutSec 5
+            Write-Host "App is still running (HTTP $($check.StatusCode)) - PATCHED"
+          } catch {
+            Write-Host "App is DOWN - process was killed by StackOverflowException - VULNERABLE"
+          }
+
           Write-Host ""
-          Write-Host "App will stay live for 20 minutes."
+          Write-Host "App will stay live for 20 minutes (if still running)."
           Write-Host ""
 
           # Keep the job alive so ngrok + app stay running for demo access
