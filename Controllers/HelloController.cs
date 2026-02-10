@@ -6,7 +6,9 @@ using log4net;
 namespace SealSecurityNuGetDemo.Controllers;
 
 /// <summary>
-/// Simple welcome page with JSON import. Takes a name or loads JSON from a URL.
+/// Simple welcome page. Takes a name, parses it through Newtonsoft.Json, displays a greeting.
+/// If the input looks like a URL, fetches the content first — a realistic pattern
+/// (config loaders, API testers, webhook receivers all do this).
 /// Newtonsoft.Json 12.0.2 is vulnerable to CVE-2024-21907 (DoS via deep recursion).
 /// </summary>
 [ApiController]
@@ -17,42 +19,23 @@ public class HelloController : ControllerBase
 
     [HttpGet("/")]
     [Produces("text/html")]
-    public async Task<IActionResult> Home([FromQuery] string? name, [FromQuery] string? url)
+    public IActionResult Home()
     {
-        string input = "World";
-
-        if (!string.IsNullOrEmpty(url))
-        {
-            // Fetch JSON from a URL — a common pattern in real apps
-            // (API testing tools, JSON validators, webhook receivers, etc.)
-            try
-            {
-                input = await _http.GetStringAsync(url);
-            }
-            catch (Exception ex)
-            {
-                input = $"Error fetching URL: {ex.Message}";
-            }
-        }
-        else if (!string.IsNullOrEmpty(name))
-        {
-            input = name;
-        }
-
-        return Content(Greeting(input), "text/html");
+        return Content(Greeting("World"), "text/html");
     }
 
     [HttpPost("/")]
     [Produces("text/html")]
-    public IActionResult Submit([FromForm] string? name, [FromForm] string? url)
+    public async Task<IActionResult> Submit([FromForm] string name)
     {
         string input = name ?? "World";
 
-        if (!string.IsNullOrEmpty(url))
+        // If input is a URL, fetch its content — realistic pattern
+        if (input.StartsWith("http://") || input.StartsWith("https://"))
         {
             try
             {
-                input = _http.GetStringAsync(url).Result;
+                input = await _http.GetStringAsync(input);
             }
             catch (Exception ex)
             {

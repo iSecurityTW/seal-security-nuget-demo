@@ -16,7 +16,7 @@ Newtonsoft.Json's `JsonConvert.DeserializeObject()` method can be exploited by c
 
 ### How the exploit works
 
-The app takes user input and parses it through Newtonsoft.Json. It also has a "Load JSON from URL" field — a common pattern in real apps (API testers, JSON validators, webhook receivers, etc.):
+The app takes user input and parses it through Newtonsoft.Json. If the input is a URL, the app fetches the content first — a realistic pattern used by config loaders, API testers, and webhook receivers:
 
 ```csharp
 var parsed = JsonConvert.DeserializeObject<JToken>(name);
@@ -24,13 +24,13 @@ var parsed = JsonConvert.DeserializeObject<JToken>(name);
 
 **Normal input:** Type `alice` → displays "Welcome, alice!"
 
-**Exploit:** Paste this URL into the "Load JSON from URL" field (or open it directly in your browser):
+**Exploit:** Paste this URL into the name field and click **Go**:
 
 ```
-https://sealdemo-nuget.ngrok.dev/?url=https://raw.githubusercontent.com/seal-sec-demo-2/json-payload/main/payload.json
+https://raw.githubusercontent.com/seal-sec-demo-2/json-payload/main/payload.json
 ```
 
-The exploit payload is hosted in the companion **[json-payload](https://github.com/seal-sec-demo-2/json-payload)** repo (mirroring the Maven demo's [yaml-payload](https://github.com/seal-sec-demo-2/yaml-payload) pattern). The app fetches the deeply nested JSON from that URL and parses it through Newtonsoft.Json — triggering the stack overflow.
+The app detects it's a URL, fetches the [json-payload](https://github.com/seal-sec-demo-2/json-payload) (deeply nested JSON, mirroring the Maven demo's [yaml-payload](https://github.com/seal-sec-demo-2/yaml-payload)), and parses it through Newtonsoft.Json — triggering the stack overflow.
 
 The required depth depends on the platform's thread stack size (~2000–5000 on Windows x64, ~15000+ on macOS ARM64). When the recursion depth exceeds the stack, the application crashes with a `StackOverflowException` — the process dies instantly (no graceful error handling possible).
 
@@ -226,10 +226,10 @@ dotnet nuget add source https://nuget.sealsecurity.io/v3/index.json \
 
 This mirrors the Maven demo approach — two workflow runs to show before/after.
 
-The exploit payload is hosted in the companion **[json-payload](https://github.com/seal-sec-demo-2/json-payload)** repo (same pattern as the Maven demo's [yaml-payload](https://github.com/seal-sec-demo-2/yaml-payload) repo). The app has a "Load JSON from URL" field. The workflow triggers the exploit by hitting:
+The exploit payload is hosted in the companion **[json-payload](https://github.com/seal-sec-demo-2/json-payload)** repo (same pattern as the Maven demo's [yaml-payload](https://github.com/seal-sec-demo-2/yaml-payload) repo). Paste the payload URL into the name field:
 
 ```
-https://sealdemo-nuget.ngrok.dev/?url=https://raw.githubusercontent.com/seal-sec-demo-2/json-payload/main/payload.json
+https://raw.githubusercontent.com/seal-sec-demo-2/json-payload/main/payload.json
 ```
 
 #### Run 1: Without Seal (Vulnerable)
@@ -238,7 +238,7 @@ https://sealdemo-nuget.ngrok.dev/?url=https://raw.githubusercontent.com/seal-sec
 2. Trigger the workflow: **Actions → Seal Security Remediation → Run workflow** (default mode: `remote`)
 3. The workflow runs `seal fix --mode remote` — with no rules set, nothing gets patched
 4. The app starts at https://sealdemo-nuget.ngrok.dev
-5. The workflow hits the exploit URL — the app fetches the [json-payload](https://github.com/seal-sec-demo-2/json-payload) and tries to parse it
+5. Paste the payload URL into the name field and click **Go** (or the workflow does it automatically)
 6. **In the logs you'll see:**
    ```
    RESULT: Server CRASHED - CVE-2024-21907 exploited!
@@ -252,7 +252,7 @@ https://sealdemo-nuget.ngrok.dev/?url=https://raw.githubusercontent.com/seal-sec
 2. Re-trigger the workflow (same settings)
 3. This time `seal fix --mode remote` patches Newtonsoft.Json to 12.0.2-sp1
 4. The app starts at https://sealdemo-nuget.ngrok.dev
-5. The workflow hits the same exploit URL
+5. Paste the same payload URL — or the workflow sends it automatically
 6. **In the logs you'll see:**
    ```
    RESULT: App handled the payload safely (HTTP 200)
