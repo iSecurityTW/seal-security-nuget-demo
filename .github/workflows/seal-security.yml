@@ -97,17 +97,14 @@ jobs:
           Write-Host "=============================================="
           Write-Host ""
 
-          # Download the CVE-2024-21907 payload from the json-payload repo
-          # (same pattern as Maven demo's yaml-payload repo)
-          Write-Host "Downloading CVE-2024-21907 payload from https://github.com/seal-sec-demo-2/json-payload ..."
-          $payload = (Invoke-WebRequest -Uri "https://raw.githubusercontent.com/seal-sec-demo-2/json-payload/main/payload.json" -UseBasicParsing).Content
-          Write-Host "Payload downloaded (5000-depth nested JSON, $($payload.Length) bytes)"
-          Write-Host "Sending payload to app..."
+          # Send the CVE-2024-21907 exploit via the URL parameter
+          # The app fetches the deeply nested JSON from the json-payload repo and parses it
+          $exploitUrl = "http://localhost:5000/?url=https://raw.githubusercontent.com/seal-sec-demo-2/json-payload/main/payload.json"
+          Write-Host "Sending exploit: $exploitUrl"
           Write-Host ""
 
           try {
-            $body = "name=$([System.Uri]::EscapeDataString($payload))"
-            $response = Invoke-WebRequest -Uri http://localhost:5000/ -Method POST -Body $body -ContentType 'application/x-www-form-urlencoded' -UseBasicParsing -TimeoutSec 30
+            $response = Invoke-WebRequest -Uri $exploitUrl -UseBasicParsing -TimeoutSec 30
             Write-Host "RESULT: App handled the payload safely (HTTP $($response.StatusCode))"
             Write-Host "Seal Security patch is ACTIVE - CVE-2024-21907 is mitigated!"
           } catch {

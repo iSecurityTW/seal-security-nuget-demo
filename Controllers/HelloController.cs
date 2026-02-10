@@ -6,33 +6,66 @@ using log4net;
 namespace SealSecurityNuGetDemo.Controllers;
 
 /// <summary>
-/// Simple welcome page. Takes a name, parses it through Newtonsoft.Json, displays a greeting.
+/// Simple welcome page with JSON import. Takes a name or loads JSON from a URL.
 /// Newtonsoft.Json 12.0.2 is vulnerable to CVE-2024-21907 (DoS via deep recursion).
 /// </summary>
 [ApiController]
 public class HelloController : ControllerBase
 {
     private static readonly ILog Logger = LogManager.GetLogger(typeof(HelloController));
+    private static readonly HttpClient _http = new();
 
     [HttpGet("/")]
     [Produces("text/html")]
-    public IActionResult Home()
+    public async Task<IActionResult> Home([FromQuery] string? name, [FromQuery] string? url)
     {
-        return Content(Greeting("World"), "text/html");
+        string input = "World";
+
+        if (!string.IsNullOrEmpty(url))
+        {
+            // Fetch JSON from a URL — a common pattern in real apps
+            // (API testing tools, JSON validators, webhook receivers, etc.)
+            try
+            {
+                input = await _http.GetStringAsync(url);
+            }
+            catch (Exception ex)
+            {
+                input = $"Error fetching URL: {ex.Message}";
+            }
+        }
+        else if (!string.IsNullOrEmpty(name))
+        {
+            input = name;
+        }
+
+        return Content(Greeting(input), "text/html");
     }
 
     [HttpPost("/")]
     [Produces("text/html")]
-    public IActionResult Submit([FromForm] string name)
+    public IActionResult Submit([FromForm] string? name, [FromForm] string? url)
     {
-        return Content(Greeting(name), "text/html");
+        string input = name ?? "World";
+
+        if (!string.IsNullOrEmpty(url))
+        {
+            try
+            {
+                input = _http.GetStringAsync(url).Result;
+            }
+            catch (Exception ex)
+            {
+                input = $"Error fetching URL: {ex.Message}";
+            }
+        }
+
+        return Content(Greeting(input), "text/html");
     }
 
     private string Greeting(string name)
     {
-        // Parse the raw input through Newtonsoft.Json — mirrors Maven demo's yaml.load(name).
-        // If input is valid JSON, it gets deserialized (triggering CVE-2024-21907 on deep nesting).
-        // If not valid JSON, we just use it as-is.
+        // Parse input through Newtonsoft.Json — same pattern as Maven demo's yaml.load(name).
         // With unpatched 12.0.2: deeply nested JSON → StackOverflowException → process crash
         // With Seal-patched 12.0.2-sp1: same input parsed safely
         string displayName;
@@ -60,6 +93,10 @@ public class HelloController : ControllerBase
             "<div class=\"input-group mb-3\">" +
             "<input type=\"text\" name=\"name\" class=\"form-control\" placeholder=\"Enter your name\" value=\"\">" +
             "<button type=\"submit\" class=\"btn btn-primary\">Go</button>" +
+            "</div>" +
+            "<div class=\"input-group mb-3\">" +
+            "<input type=\"text\" name=\"url\" class=\"form-control\" placeholder=\"Or load JSON from URL\" value=\"\">" +
+            "<button type=\"submit\" class=\"btn btn-outline-secondary\">Load</button>" +
             "</div>" +
             "</form>" +
             "</div>" +

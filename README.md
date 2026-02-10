@@ -16,7 +16,7 @@ Newtonsoft.Json's `JsonConvert.DeserializeObject()` method can be exploited by c
 
 ### How the exploit works
 
-The app takes user input and parses it directly through Newtonsoft.Json (same pattern as the Maven demo's `yaml.load(name)`):
+The app takes user input and parses it through Newtonsoft.Json. It also has a "Load JSON from URL" field — a common pattern in real apps (API testers, JSON validators, webhook receivers, etc.):
 
 ```csharp
 var parsed = JsonConvert.DeserializeObject<JToken>(name);
@@ -24,16 +24,13 @@ var parsed = JsonConvert.DeserializeObject<JToken>(name);
 
 **Normal input:** Type `alice` → displays "Welcome, alice!"
 
-**Exploit — send deeply nested JSON (thousands of levels):**
+**Exploit:** Paste this URL into the "Load JSON from URL" field (or open it directly in your browser):
+
 ```
-{"n":{"n":{"n":{"n":{"n":{"n":...5000+ levels...}}}}}}
+https://sealdemo-nuget.ngrok.dev/?url=https://raw.githubusercontent.com/seal-sec-demo-2/json-payload/main/payload.json
 ```
 
-The exploit payload is hosted in the companion **[json-payload](https://github.com/seal-sec-demo-2/json-payload)** repo (mirroring the Maven demo's [yaml-payload](https://github.com/seal-sec-demo-2/yaml-payload) pattern). The workflow auto-fetches it. To test manually:
-
-```bash
-curl -s -X POST http://localhost:5000/ -d "name=$(curl -s https://raw.githubusercontent.com/seal-sec-demo-2/json-payload/main/payload.json | python3 -c 'import sys,urllib.parse; print(urllib.parse.quote(sys.stdin.read()))')"
-```
+The exploit payload is hosted in the companion **[json-payload](https://github.com/seal-sec-demo-2/json-payload)** repo (mirroring the Maven demo's [yaml-payload](https://github.com/seal-sec-demo-2/yaml-payload) pattern). The app fetches the deeply nested JSON from that URL and parses it through Newtonsoft.Json — triggering the stack overflow.
 
 The required depth depends on the platform's thread stack size (~2000–5000 on Windows x64, ~15000+ on macOS ARM64). When the recursion depth exceeds the stack, the application crashes with a `StackOverflowException` — the process dies instantly (no graceful error handling possible).
 
@@ -229,7 +226,11 @@ dotnet nuget add source https://nuget.sealsecurity.io/v3/index.json \
 
 This mirrors the Maven demo approach — two workflow runs to show before/after.
 
-Unlike the Maven demo (where the exploit payload is a short YAML string you paste into the browser), CVE-2024-21907 requires a **deeply nested JSON payload** — thousands of levels deep — to overflow the stack. The payload is hosted in the companion **[json-payload](https://github.com/seal-sec-demo-2/json-payload)** repo (same pattern as the Maven demo's [yaml-payload](https://github.com/seal-sec-demo-2/yaml-payload) repo). The workflow **automatically fetches and sends the payload** after starting the app, so the crash (or safe handling) is visible right in the GitHub Actions logs.
+The exploit payload is hosted in the companion **[json-payload](https://github.com/seal-sec-demo-2/json-payload)** repo (same pattern as the Maven demo's [yaml-payload](https://github.com/seal-sec-demo-2/yaml-payload) repo). The app has a "Load JSON from URL" field. The workflow triggers the exploit by hitting:
+
+```
+https://sealdemo-nuget.ngrok.dev/?url=https://raw.githubusercontent.com/seal-sec-demo-2/json-payload/main/payload.json
+```
 
 #### Run 1: Without Seal (Vulnerable)
 
@@ -237,7 +238,7 @@ Unlike the Maven demo (where the exploit payload is a short YAML string you past
 2. Trigger the workflow: **Actions → Seal Security Remediation → Run workflow** (default mode: `remote`)
 3. The workflow runs `seal fix --mode remote` — with no rules set, nothing gets patched
 4. The app starts at https://sealdemo-nuget.ngrok.dev
-5. The workflow automatically fetches the [5000-depth nested JSON payload](https://github.com/seal-sec-demo-2/json-payload) and sends it to the app
+5. The workflow hits the exploit URL — the app fetches the [json-payload](https://github.com/seal-sec-demo-2/json-payload) and tries to parse it
 6. **In the logs you'll see:**
    ```
    RESULT: Server CRASHED - CVE-2024-21907 exploited!
@@ -251,7 +252,7 @@ Unlike the Maven demo (where the exploit payload is a short YAML string you past
 2. Re-trigger the workflow (same settings)
 3. This time `seal fix --mode remote` patches Newtonsoft.Json to 12.0.2-sp1
 4. The app starts at https://sealdemo-nuget.ngrok.dev
-5. The workflow sends the same [5000-depth payload](https://github.com/seal-sec-demo-2/json-payload)
+5. The workflow hits the same exploit URL
 6. **In the logs you'll see:**
    ```
    RESULT: App handled the payload safely (HTTP 200)
