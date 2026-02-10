@@ -32,7 +32,7 @@ var parsed = JsonConvert.DeserializeObject<JToken>(name);
 The exploit payload is hosted in the companion **[json-payload](https://github.com/seal-sec-demo-2/json-payload)** repo (mirroring the Maven demo's [yaml-payload](https://github.com/seal-sec-demo-2/yaml-payload) pattern). The workflow auto-fetches it. To test manually:
 
 ```bash
-curl -s "http://localhost:5000/?name=$(curl -s https://raw.githubusercontent.com/seal-sec-demo-2/json-payload/main/payload.json | python3 -c 'import sys,urllib.parse; print(urllib.parse.quote(sys.stdin.read()))')"
+curl -s -X POST http://localhost:5000/ -d "name=$(curl -s https://raw.githubusercontent.com/seal-sec-demo-2/json-payload/main/payload.json | python3 -c 'import sys,urllib.parse; print(urllib.parse.quote(sys.stdin.read()))')"
 ```
 
 The required depth depends on the platform's thread stack size (~2000–5000 on Windows x64, ~15000+ on macOS ARM64). When the recursion depth exceeds the stack, the application crashes with a `StackOverflowException` — the process dies instantly (no graceful error handling possible).
