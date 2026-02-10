@@ -96,37 +96,10 @@ jobs:
           Write-Host "App: https://sealdemo-nuget.ngrok.dev"
           Write-Host "=============================================="
           Write-Host ""
-
-          # Send the CVE-2024-21907 exploit — paste the payload URL into the name field
-          # The app detects it's a URL, fetches the deeply nested JSON, and parses it
-          $payloadUrl = "https://raw.githubusercontent.com/seal-sec-demo-2/json-payload/main/payload.json"
-          Write-Host "Sending exploit URL to name field: $payloadUrl"
+          Write-Host "Paste this into the name field and click Go to test CVE-2024-21907:"
+          Write-Host "https://raw.githubusercontent.com/seal-sec-demo-2/json-payload/main/payload.json"
           Write-Host ""
-
-          try {
-            $body = "name=$([System.Uri]::EscapeDataString($payloadUrl))"
-            $response = Invoke-WebRequest -Uri http://localhost:5000/ -Method POST -Body $body -ContentType 'application/x-www-form-urlencoded' -UseBasicParsing -TimeoutSec 30
-            Write-Host "RESULT: App handled the payload safely (HTTP $($response.StatusCode))"
-            Write-Host "Seal Security patch is ACTIVE - CVE-2024-21907 is mitigated!"
-          } catch {
-            Write-Host "RESULT: Server CRASHED - CVE-2024-21907 exploited!"
-            Write-Host "The deeply nested JSON caused a StackOverflowException (Denial of Service)"
-            Write-Host "Error: $_"
-          }
-
-          Write-Host ""
-
-          # Check if app is still alive
-          Start-Sleep -Seconds 3
-          try {
-            $check = Invoke-WebRequest -Uri http://localhost:5000 -UseBasicParsing -TimeoutSec 5
-            Write-Host "App is still running (HTTP $($check.StatusCode)) - PATCHED"
-          } catch {
-            Write-Host "App is DOWN - process was killed by StackOverflowException - VULNERABLE"
-          }
-
-          Write-Host ""
-          Write-Host "App will stay live for 20 minutes (if still running)."
+          Write-Host "App will stay live for 20 minutes."
           Write-Host ""
 
           # Keep the job alive so ngrok + app stay running for demo access
