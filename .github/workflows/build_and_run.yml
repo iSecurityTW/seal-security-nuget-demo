@@ -40,7 +40,7 @@ jobs:
         Invoke-WebRequest -Uri https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-v3-stable-windows-amd64.zip -OutFile ngrok.zip
         Expand-Archive ngrok.zip -DestinationPath .
         .\ngrok.exe config add-authtoken ${{ secrets.NGROK_AUTHTOKEN }}
-        Start-Process -FilePath .\ngrok.exe -ArgumentList 'http','5000' -NoNewWindow
+        Start-Process -FilePath .\ngrok.exe -ArgumentList 'http','--url=sealdemo-nuget.ngrok.dev','5000' -NoNewWindow
         Start-Sleep -Seconds 3
         Write-Host "App: https://sealdemo-nuget.ngrok.dev"
         Write-Host ""
