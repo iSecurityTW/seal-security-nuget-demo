@@ -1,0 +1,24 @@
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.5.2.0
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "seal-security-nuget-demo", "seal-security-nuget-demo.csproj", "{0245BCF4-6464-0261-0B34-A59C9E392947}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{0245BCF4-6464-0261-0B34-A59C9E392947}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{0245BCF4-6464-0261-0B34-A59C9E392947}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{0245BCF4-6464-0261-0B34-A59C9E392947}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{0245BCF4-6464-0261-0B34-A59C9E392947}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {2A48D656-6F5F-43E4-84DA-494ADD210C09}
+	EndGlobalSection
+EndGlobal

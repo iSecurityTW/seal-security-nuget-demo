@@ -1,24 +1,23 @@
 meta:
   schema-version: 0.1.0
-  created-on: "2026-02-09T12:00:00Z"
-  cli-version: 0.3.238
-
+  created-on: "2026-06-02T05:47:40Z"
+  cli-version: v0.3.238
 projects:
   nuget-demo:
     targets:
-      - seal-security-nuget-demo.csproj
+      - D:/SEAL/Nuget-Demo/seal-security-nuget-demo/seal-security-nuget-demo.csproj
     manager:
-      ecosystem: ".NET"
+      ecosystem: .NET
       name: dotnet
-      version: ""
+      version: "10.0.300\r"
       class: manifest
     overrides:
-      Newtonsoft.Json:
-        "12.0.2":
-          use: 12.0.2-sp1
       log4net:
-        "2.0.5":
+        2.0.5:
           use: 2.0.5-sp1
-      System.Net.Http:
-        "4.3.0":
+      newtonsoft.json:
+        12.0.2:
+          use: 12.0.2-sp1
+      system.net.http:
+        4.3.0:
           use: 4.3.0-sp1

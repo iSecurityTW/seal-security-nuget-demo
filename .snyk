@@ -1,0 +1,27 @@
+# Snyk (https://snyk.io) policy file, patches or ignores known vulnerabilities.
+version: v1.25.0
+ignore:
+  SNYK-DOTNET-NEWTONSOFTJSON-2774678:
+    - '* > newtonsoft.json@12.0.2':
+        reason: Fixed by Seal Security
+        created: 2026-06-02T05:47:40.319Z
+  SNYK-DOTNET-LOG4NET-568897:
+    - '* > log4net@2.0.5':
+        reason: Fixed by Seal Security
+        created: 2026-06-02T05:47:40.319Z
+  SNYK-DOTNET-SYSTEMNETHTTP-60045:
+    - '* > system.net.http@4.3.0':
+        reason: Fixed by Seal Security
+        created: 2026-06-02T05:47:40.319Z
+  SNYK-DOTNET-SYSTEMNETHTTP-72439:
+    - '* > system.net.http@4.3.0':
+        reason: Fixed by Seal Security
+        created: 2026-06-02T05:47:40.319Z
+  SNYK-DOTNET-SYSTEMNETHTTP-60046:
+    - '* > system.net.http@4.3.0':
+        reason: Fixed by Seal Security
+        created: 2026-06-02T05:47:40.319Z
+  SNYK-DOTNET-SYSTEMNETHTTP-60047:
+    - '* > system.net.http@4.3.0':
+        reason: Fixed by Seal Security
+        created: 2026-06-02T05:47:40.319Z

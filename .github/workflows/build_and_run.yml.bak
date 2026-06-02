@@ -1,0 +1,48 @@
+name: "Build and Run"
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build-and-run:
+    runs-on: windows-2022
+    timeout-minutes: 30
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: '9.0.x'
+
+    - name: Restore Dependencies
+      run: dotnet restore
+      env:
+        SEAL_PROJECT: nuget-demo
+        SEAL_TOKEN: ${{ secrets.SEAL_TOKEN }}
+
+    - name: Build Application
+      run: dotnet build --no-restore
+      env:
+        SEAL_PROJECT: nuget-demo
+        SEAL_TOKEN: ${{ secrets.SEAL_TOKEN }}
+
+    - name: Publish Application
+      run: dotnet publish -c Release -r win-x64 -o ./publish
+      env:
+        SEAL_PROJECT: nuget-demo
+        SEAL_TOKEN: ${{ secrets.SEAL_TOKEN }}
+
+    - name: Run Server with ngrok
+      shell: pwsh
+      run: |
+        Invoke-WebRequest -Uri https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-v3-stable-windows-amd64.zip -OutFile ngrok.zip
+        Expand-Archive ngrok.zip -DestinationPath .
+        .\ngrok.exe config add-authtoken ${{ secrets.NGROK_AUTHTOKEN }}
+        Start-Process -FilePath .\ngrok.exe -ArgumentList 'http','--url=sealdemo-nuget.ngrok.dev','5000' -NoNewWindow
+        Start-Sleep -Seconds 3
+        Write-Host "App: https://sealdemo-nuget.ngrok.dev"
+        Write-Host ""
+        Write-Host "This demo uses Newtonsoft.Json 12.0.2 (CVE-2024-21907)"
+        dotnet .\publish\seal-security-nuget-demo.dll
